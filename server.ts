@@ -190,6 +190,50 @@ app.post('/api/admin/config', async (req, res) => {
   }
 });
 
+app.post('/api/simulate', async (req, res) => {
+  const { messages, systemPrompt, clinicName } = req.body;
+  if (!messages) return res.status(400).json({ error: 'messages is required' });
+
+  let ai = defaultAi;
+  if (!ai) {
+     try {
+        const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
+        if (fs.existsSync(configPath)) {
+           const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
+           if (savedKey) {
+              ai = new GoogleGenAI({ apiKey: savedKey });
+           }
+        }
+     } catch (e) {
+        console.error("Error fetching local config:", e);
+     }
+  }
+
+  if (!ai) {
+     return res.status(500).json({ error: 'La llave de API (API Key) de Gemini no se ha configurado. Pidele al administrador que la configure.' });
+  }
+
+  try {
+    const contents = messages.map((m: any) => ({
+      role: m.role,
+      parts: [{ text: m.text }]
+    }));
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents,
+      config: {
+        systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinicName || 'clínica'}.`
+      }
+    });
+
+    res.json({ text: response.text || '' });
+  } catch (err: any) {
+    console.error("Simulation Error:", err);
+    res.status(500).json({ error: err.message || 'Error en la simulación' });
+  }
+});
+
 app.post('/api/whatsapp/config', (req, res) => {
   const { clinicId, botActive, systemPrompt, name } = req.body;
   if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });

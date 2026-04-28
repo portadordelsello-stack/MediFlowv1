@@ -130,43 +130,34 @@ export default function Dashboard({ user }: { user: User }) {
   const handleSimulate = async () => {
     if (!simulatorInput.trim()) return;
     const newMsg = { role: 'user' as const, text: simulatorInput };
+    const messagesToSend = [...simulatorMessages, newMsg];
+    
     setSimulatorMessages(prev => [...prev, newMsg]);
     setSimulatorInput('');
     setIsSimulating(true);
     
     try {
-      let apiKey = process.env.GEMINI_API_KEY || '';
-      
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-         // Fallback to global setting if no env
-         const getDoc = await import('firebase/firestore').then(m => m.getDoc);
-         const docRef = doc(db, 'globalSettings', 'config');
-         const snap = await getDoc(docRef);
-         if (snap.exists() && snap.data().geminiApiKey) {
-            apiKey = snap.data().geminiApiKey;
-         }
+      const res = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: messagesToSend,
+          systemPrompt,
+          clinicName: clinic?.name
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+         throw new Error(data.error || 'Server error');
       }
 
-      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-        throw new Error('API key not valid.');
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-          { role: 'user', parts: [{ text: newMsg.text }] }
-        ],
-        config: {
-          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
-        }
-      });
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: data.text || '' }]);
     } catch (e: any) {
       console.error(e);
-      let errorText = 'Error en la simulación.';
-      if (e?.message?.includes('API key not valid')) {
-         errorText = 'Error interno: La llave de API (API Key) de Gemini no es válida o no está configurada. Revísalo en el panel de Secrets.';
+      let errorText = e.message || 'Error en la simulación.';
+      if (errorText.includes('API key not valid')) {
+         errorText = 'Error interno: La llave de API (API Key) de Gemini no es válida o no está configurada.';
       }
       setSimulatorMessages(prev => [...prev, { role: 'model', text: errorText }]);
     }
