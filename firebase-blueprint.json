@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Clinic": {
+      "title": "Clinic",
+      "description": "A medical clinic that uses the SaaS",
+      "type": "object",
+      "properties": {
+        "ownerId": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "specialty": { "type": "string", "maxLength": 100 },
+        "plan": { "type": "string", "enum": ["TRIAL", "MONTHLY"] },
+        "trialEndsAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "systemPrompt": { "type": "string", "maxLength": 5000 },
+        "botActive": { "type": "boolean" },
+        "whatsappSessionStatus": { "type": "string", "enum": ["DISCONNECTED", "CONNECTED", "QR_READY"] }
+      },
+      "required": ["ownerId", "name", "specialty", "plan", "trialEndsAt", "createdAt", "updatedAt", "botActive", "whatsappSessionStatus"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "A patient of the clinic",
+      "type": "object",
+      "properties": {
+        "clinicOwnerId": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "name": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["clinicOwnerId", "phone", "createdAt", "updatedAt"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Patient appointment",
+      "type": "object",
+      "properties": {
+        "clinicOwnerId": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["SCHEDULED", "CONFIRMED", "CANCELLED", "COMPLETED"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["clinicOwnerId", "patientId", "date", "status", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat log between bot and patient",
+      "type": "object",
+      "properties": {
+        "clinicOwnerId": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "direction": { "type": "string", "enum": ["INBOUND", "OUTBOUND"] },
+        "text": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "number" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["clinicOwnerId", "patientId", "direction", "text", "createdAt", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/clinics/{clinicId}": {
+      "schema": { "$ref": "#/entities/Clinic" },
+      "description": "Clinic main document"
+    },
+    "/clinics/{clinicId}/patients/{patientId}": {
+      "schema": { "$ref": "#/entities/Patient" },
+      "description": "Clinic patients"
+    },
+    "/clinics/{clinicId}/appointments/{appointmentId}": {
+      "schema": { "$ref": "#/entities/Appointment" },
+      "description": "Clinic appointments"
+    },
+    "/clinics/{clinicId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Message logs"
+    }
+  }
+}
