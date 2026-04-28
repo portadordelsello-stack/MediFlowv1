@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, X } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
+import AdminPanel from './AdminPanel';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -25,7 +26,7 @@ export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'administracion'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -33,6 +34,7 @@ export default function Dashboard({ user }: { user: User }) {
   const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
   const [simulatorInput, setSimulatorInput] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -133,7 +135,22 @@ export default function Dashboard({ user }: { user: User }) {
     setIsSimulating(true);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      let apiKey = process.env.GEMINI_API_KEY || '';
+      
+      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+         // Fallback to global setting if no env
+         const getDoc = await import('firebase/firestore').then(m => m.getDoc);
+         const docRef = doc(db, 'globalSettings', 'config');
+         const snap = await getDoc(docRef);
+         if (snap.exists() && snap.data().geminiApiKey) {
+            apiKey = snap.data().geminiApiKey;
+         }
+      }
+
+      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+        throw new Error('API key not valid.');
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
@@ -145,9 +162,13 @@ export default function Dashboard({ user }: { user: User }) {
         }
       });
       setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
+      let errorText = 'Error en la simulación.';
+      if (e?.message?.includes('API key not valid')) {
+         errorText = 'Error interno: La llave de API (API Key) de Gemini no es válida o no está configurada. Revísalo en el panel de Secrets.';
+      }
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: errorText }]);
     }
     setIsSimulating(false);
   };
@@ -197,6 +218,16 @@ export default function Dashboard({ user }: { user: User }) {
             <UserIcon className="w-5 h-5" />
             Perfil
           </button>
+          
+          {user.email === 'portadordelsello@gmail.com' && (
+            <button 
+              onClick={() => setActiveTab('administracion')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'administracion' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <ShieldCheck className="w-5 h-5" />
+              Administración
+            </button>
+          )}
         </nav>
 
         <div className="p-4 border-t border-slate-100">
@@ -238,6 +269,7 @@ export default function Dashboard({ user }: { user: User }) {
               {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
               {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
+              {activeTab === 'administracion' && 'Panel de Administración'}
             </h2>
             <p className="text-sm text-slate-500">
               {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
@@ -346,14 +378,28 @@ export default function Dashboard({ user }: { user: User }) {
 
               {/* SIMULADOR WHATSAPP */}
               <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
-                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
-                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
-                       <Bot className="w-6 h-6" />
+                 <div className="bg-[#00a884] text-white p-4 flex items-center justify-between shrink-0 shadow-sm z-10">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
+                         <Bot className="w-6 h-6" />
+                      </div>
+                      <div>
+                         <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
+                         <p className="text-[11px] text-emerald-100">Simulador (IA aislada) / Modo Producción</p>
+                      </div>
                     </div>
-                    <div>
-                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
-                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setShowQRModal(true);
+                        if (waStatus === 'DISCONNECTED') {
+                          startWhatsApp();
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-2 border border-white/20"
+                    >
+                      <QrCode className="w-4 h-4"/>
+                      <span className="hidden sm:inline">Conectar WPP</span>
+                    </button>
                  </div>
                  
                  <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
@@ -556,7 +602,84 @@ export default function Dashboard({ user }: { user: User }) {
                </div>
             </div>
           )}
+
+          {/* TAB: ADMINISTRACION */}
+          {activeTab === 'administracion' && user.email === 'portadordelsello@gmail.com' && (
+            <AdminPanel />
+          )}
         </div>
+
+        {/* QR Modal when triggered from Connect Button */}
+        {showQRModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 relative">
+              <button onClick={() => setShowQRModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="text-center mb-6">
+                <h3 className="text-xl font-bold text-slate-900">Conexión de WhatsApp</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Enlaza tu dispositivo para que la IA responda.
+                </p>
+              </div>
+
+              <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 rounded-xl min-h-[250px]">
+                  {waStatus === 'DISCONNECTED' && (
+                    <div className="text-center">
+                      <QrCode className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                      <button 
+                        onClick={startWhatsApp}
+                        className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800"
+                      >
+                        Generar QR de WhatsApp
+                      </button>
+                    </div>
+                  )}
+
+                  {waStatus === 'INITIALIZING' && (
+                    <div className="text-center">
+                      <div className="w-10 h-10 border-4 border-sky-100 border-t-sky-600 rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-slate-600 font-medium text-sm">Generando código seguro...</p>
+                    </div>
+                  )}
+
+                  {waStatus === 'QR_READY' && qrCode && (
+                    <div className="text-center animate-fade-in">
+                      <div className="relative p-3 border-4 border-slate-50 rounded-xl bg-white shadow-inner mb-4 inline-block">
+                        <img src={qrCode} alt="WhatsApp QR Code" className="w-48 h-48" />
+                      </div>
+                      <p className="text-slate-600 text-sm font-medium">1. Abre WhatsApp en tu celular.</p>
+                      <p className="text-slate-500 text-xs mt-1">2. Configuración &gt; Dispositivos Vinculados.</p>
+                      <p className="text-slate-500 text-xs mt-1">3. Escanea este código para conectar.</p>
+                    </div>
+                  )}
+
+                  {waStatus === 'CONNECTED' && (
+                    <div className="text-center">
+                       <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <MessageCircle className="w-6 h-6" />
+                       </div>
+                       <h4 className="text-base font-bold text-slate-900 mb-1">Línea Conectada</h4>
+                       <p className="text-slate-500 text-xs">
+                          La IA ya puede escuchar tus mensajes.
+                       </p>
+                    </div>
+                  )}
+              </div>
+
+               {waStatus === 'CONNECTED' && (
+                  <button 
+                    onClick={() => setShowQRModal(false)}
+                    className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
+                  >
+                    Cerrar y continuar
+                  </button>
+               )}
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );

@@ -8,8 +8,14 @@ import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 
-// Initialize AI if API key is present
-const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+// Initialize AI if API key is present in ENV
+const defaultAi = (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') 
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) 
+  : null;
+
+if (!defaultAi) {
+  console.warn("WARNING: GEMINI_API_KEY is missing in env. Server will fallback to globalSettings API Key on demand.");
+}
 
 const PORT = 3000;
 const app = express();
@@ -101,29 +107,55 @@ async function startWhatsAppBot(clinicId: string) {
         continue;
       }
 
-      if (ai) {
-        try {
-          const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
-
-          await sock.presenceSubscribe(remoteJid);
-          await sock.sendPresenceUpdate('composing', remoteJid);
-          
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `Mensaje del paciente: "${textMessage}"`,
-            config: {
-               systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+      let ai = defaultAi;
+      if (!ai) {
+         try {
+            const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
+            if (fs.existsSync(configPath)) {
+               const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
+               if (savedKey) {
+                  ai = new GoogleGenAI({ apiKey: savedKey });
+               }
             }
-          });
+         } catch (e) {
+            console.error("Error fetching local config:", e);
+         }
+      }
 
-          const replyText = response.text || 'Error generando respuesta.';
-          
-          await sock.sendPresenceUpdate('paused', remoteJid);
-          await sock.sendMessage(remoteJid, { text: replyText });
-        } catch (err) {
-          console.error("AI Error:", err);
-          await sock.sendPresenceUpdate('paused', remoteJid);
+      if (!ai) {
+          const errorMsg = 'Error interno: La llave de API (API Key) de Gemini no es válida o no se ha configurado. Por favor, revisa la sección Administrador.';
+          await sock.sendMessage(remoteJid, { text: errorMsg });
+          continue;
+      }
+
+      try {
+        const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
+
+        await sock.presenceSubscribe(remoteJid);
+        await sock.sendPresenceUpdate('composing', remoteJid);
+        
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: `Mensaje del paciente: "${textMessage}"`,
+          config: {
+             systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+          }
+        });
+
+        const replyText = response.text || 'Error generando respuesta.';
+        
+        await sock.sendPresenceUpdate('paused', remoteJid);
+        await sock.sendMessage(remoteJid, { text: replyText });
+      } catch (err: any) {
+        console.error("AI Error:", err);
+        await sock.sendPresenceUpdate('paused', remoteJid);
+        
+        let errorMsg = 'Lo siento, estoy teniendo problemas técnicos en este momento.';
+        if (err?.message?.includes('API key not valid')) {
+          errorMsg = 'Error interno: La llave de API (API Key) de Gemini no es válida o no se ha configurado. Por favor, revisa la configuración en el panel de Secrets de tu aplicación.';
         }
+
+        await sock.sendMessage(remoteJid, { text: errorMsg });
       }
     }
   });
@@ -142,6 +174,20 @@ app.post('/api/whatsapp/start', async (req, res) => {
   }
   
   res.json({ status: waStatus.get(clinicId) });
+});
+
+app.post('/api/admin/config', async (req, res) => {
+  const { apiKey } = req.body;
+  if (apiKey !== undefined) {
+    const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
+    if (!fs.existsSync(path.dirname(configPath))) {
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    }
+    fs.writeFileSync(configPath, apiKey);
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ error: 'Missing apiKey' });
+  }
 });
 
 app.post('/api/whatsapp/config', (req, res) => {
