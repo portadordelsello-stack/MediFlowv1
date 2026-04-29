@@ -16,12 +16,20 @@ function getGenAIClient(): GoogleGenAI | null {
     try {
       const creds = JSON.parse(fs.readFileSync(vertexCredsPath, 'utf-8'));
       process.env.GOOGLE_APPLICATION_CREDENTIALS = vertexCredsPath;
-      return new GoogleGenAI({
+      
+      const oldKey = process.env.GEMINI_API_KEY;
+      delete process.env.GEMINI_API_KEY;
+      
+      const client = new GoogleGenAI({
         vertexai: {
           project: creds.project_id,
           location: 'us-central1' // Defaulting to us-central1
         }
       });
+      
+      if (oldKey) process.env.GEMINI_API_KEY = oldKey;
+      
+      return client;
     } catch (e) {
       console.error("Error loading Vertex credentials:", e);
     }
