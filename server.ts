@@ -157,7 +157,8 @@ async function startWhatsAppBot(clinicId: string) {
 
         if (!customIntercept) {
            const dbContext = `\n\nAquí tienes la lista de citas (turnos) guardadas en la base de datos de la clínica actualmente: ${JSON.stringify(clinicConfig.appointments || [])}.
-           \n\nRegla estricta: Si un paciente te pide un turno, una consulta o agendar una cita, DEBES obligatoriamente responderle indicándole que ingrese a este link para escoger su horario: ${clinicConfig.domain}/book/${clinicId}`;
+           \n\nRegla estricta: Si un paciente te pide un turno, una consulta o agendar una cita, DEBES obligatoriamente responderle indicándole que ingrese a este link para escoger su horario: ${clinicConfig.domain}/book/${clinicId}
+           IMPORTANTE: Entrega el link en formato de texto plano y crudo. NO uses formato interactivo o markdown como [texto](link).`;
 
            const response = await ai.models.generateContent({
              model: 'gemini-2.5-flash',
