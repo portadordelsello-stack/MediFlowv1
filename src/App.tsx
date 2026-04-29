@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { Activity, ShieldCheck, HeartPulse, QrCode, Phone, MessageSquare, X, Calendar } from 'lucide-react';
 import Dashboard from './components/Dashboard';
+import BookingPage from './components/BookingPage';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -22,36 +23,11 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
-function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [clinicDocExists, setClinicDocExists] = useState<boolean | null>(null);
+function MainApp({ user, loading, clinicDocExists }: { user: User | null, loading: boolean, clinicDocExists: boolean | null }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
-
   const [clinicName, setClinicName] = useState('');
   const [specialty, setSpecialty] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u);
-        const clinicRef = doc(db, 'clinics', u.uid);
-        try {
-          const clinicDoc = await getDoc(clinicRef);
-          setClinicDocExists(clinicDoc.exists());
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `clinics/${u.uid}`);
-          setClinicDocExists(false); // Fallback to allowing them to create it if we failed to get it? Or just let it handle
-        }
-      } else {
-        setUser(null);
-        setClinicDocExists(null);
-      }
-      setLoading(false);
-    });
-    return unsubscribe;
-  }, []);
 
   const login = async () => {
     try {
@@ -80,7 +56,8 @@ function App() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setClinicDocExists(true);
+      // window.location.reload() or let state sync handle it
+      window.location.reload();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `clinics/${user.uid}`);
     }
@@ -259,11 +236,40 @@ function App() {
      );
   }
 
-  // user exists && clinicDocExists === true
+  return <Dashboard user={user} />;
+}
+
+function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [clinicDocExists, setClinicDocExists] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        const clinicRef = doc(db, 'clinics', u.uid);
+        try {
+          const clinicDoc = await getDoc(clinicRef);
+          setClinicDocExists(clinicDoc.exists());
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, `clinics/${u.uid}`);
+          setClinicDocExists(false);
+        }
+      } else {
+        setUser(null);
+        setClinicDocExists(null);
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Dashboard user={user} />} />
+        <Route path="/book/:clinicId" element={<BookingPage />} />
+        <Route path="/" element={<MainApp user={user} loading={loading} clinicDocExists={clinicDocExists} />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

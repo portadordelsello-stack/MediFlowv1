@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, orderBy } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, X } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
@@ -36,6 +36,8 @@ export default function Dashboard({ user }: { user: User }) {
   const [isSimulating, setIsSimulating] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
 
+  const [appointments, setAppointments] = useState<any[]>([]);
+
   useEffect(() => {
     const unsubscribe = onSnapshot(
       doc(db, 'clinics', user.uid), 
@@ -52,7 +54,25 @@ export default function Dashboard({ user }: { user: User }) {
         handleFirestoreError(error, OperationType.GET, `clinics/${user.uid}`);
       }
     );
-    return unsubscribe;
+
+    const unsubscribeAppointments = onSnapshot(
+      query(collection(db, `clinics/${user.uid}/appointments`), orderBy('date'), orderBy('time')),
+      (snapshot) => {
+        const apps: any[] = [];
+        snapshot.forEach(doc => {
+          apps.push({ id: doc.id, ...doc.data() });
+        });
+        setAppointments(apps);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, `clinics/${user.uid}/appointments`);
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      unsubscribeAppointments();
+    };
   }, [user.uid]);
 
   // Sync latest config to the WhatsApp server periodically or on change
@@ -65,11 +85,13 @@ export default function Dashboard({ user }: { user: User }) {
           clinicId: user.uid,
           botActive: clinic.botActive,
           systemPrompt: clinic.systemPrompt,
-          name: clinic.name
+          name: clinic.name,
+          domain: window.location.origin,
+          appointments
         })
       }).catch(console.error);
     }
-  }, [clinic, user.uid]);
+  }, [clinic, user.uid, appointments]);
 
   // Poll for WhatsApp connection status
   useEffect(() => {
@@ -302,18 +324,27 @@ export default function Dashboard({ user }: { user: User }) {
                </div>
                
                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
+                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center justify-between">
+                    <span>Citas</span>
+                    <a href={`/book/${user.uid}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-sky-600 hover:underline">Ver página de reservas</a>
+                  </h3>
                   <div className="space-y-4 flex-1">
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
-                        <p className="font-semibold text-slate-800">Juan Pérez</p>
-                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
-                     </div>
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
-                        <p className="font-semibold text-slate-800">María López</p>
-                        <p className="text-sm text-slate-500">Revisión de estudios</p>
-                     </div>
+                     {appointments.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-10">No hay citas registradas</p>
+                     ) : (
+                        appointments.map((apt: any) => (
+                           <div key={apt.id} className={`p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 ${apt.status === 'confirmed' ? 'border-l-emerald-500' : 'border-l-sky-500'}`}>
+                              <p className="text-xs font-bold text-slate-400 mb-1">{apt.date} - {apt.time}h</p>
+                              <p className="font-semibold text-slate-800">{apt.patientName}</p>
+                              <p className="text-sm text-slate-500 flex justify-between items-center">
+                                 <span>DNI: {apt.patientDni}</span>
+                                 <span className={`text-xs px-2 py-0.5 rounded-full ${apt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
+                                    {apt.status === 'confirmed' ? 'Confirmado' : 'Pendiente'}
+                                 </span>
+                              </p>
+                           </div>
+                        ))
+                     )}
                   </div>
                </div>
             </div>
@@ -505,7 +536,25 @@ export default function Dashboard({ user }: { user: User }) {
                   )}
                 </div>
                 
-                <div className="border-t border-slate-100 pt-6 flex items-center justify-between">
+                <div className="border-t border-slate-100 pt-6 mt-6">
+                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Número de WhatsApp de la Clínica</h4>
+                  <p className="text-xs text-slate-500 mb-4">Este es el número al que los pacientes enviarán mensajes para confirmar sus turnos. Ingresa el código de país sin el signo +, por ejemplo: 5493424638046.</p>
+                  
+                  <div className="flex gap-4">
+                     <input 
+                       type="text" 
+                       value={clinic?.whatsappNumber || ''}
+                       onChange={(e) => {
+                         const val = e.target.value.replace(/[^0-9]/g, '');
+                         updateDoc(doc(db, 'clinics', user.uid), { whatsappNumber: val });
+                       }}
+                       placeholder="Ej. 5493424638046"
+                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-sky-500"
+                     />
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6 mt-6 flex items-center justify-between">
                   <div>
                     <h4 className="font-semibold text-slate-900 text-sm">Activar Motor de Respuestas (Bot AI)</h4>
                     <p className="text-xs text-slate-500">Permite que Gemini comience a responder auto-mágicamente.</p>

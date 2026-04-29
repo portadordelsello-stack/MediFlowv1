@@ -25,6 +25,8 @@ interface AppConfig {
   botActive: boolean;
   systemPrompt: string;
   name: string;
+  appointments?: any[];
+  domain?: string;
 }
 
 // In-memory store for WhatsApp clients and configs
@@ -134,15 +136,38 @@ async function startWhatsAppBot(clinicId: string) {
         await sock.presenceSubscribe(remoteJid);
         await sock.sendPresenceUpdate('composing', remoteJid);
         
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: `Mensaje del paciente: "${textMessage}"`,
-          config: {
-             systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
-          }
-        });
+        let customIntercept = false;
+        let replyText = '';
+        const lowerMsg = textMessage.toLowerCase();
+        
+        // Manual verification logic instead of asking AI to verify
+        if (lowerMsg.includes('he agendado mi turno para el')) {
+           const match = textMessage.match(/(\d{4}-\d{2}-\d{2})-(\d{2}:\d{2})/);
+           if (match) {
+             const [_, dateMatch, timeMatch] = match;
+             const exists = (clinicConfig.appointments || []).find((a: any) => a.date === dateMatch && a.time === timeMatch);
+             if (exists) {
+               replyText = "Su turno ha sido confirmado, lo esperamos.";
+               customIntercept = true;
+               
+               // Optionally call the webhook / update locally
+             }
+           }
+        }
 
-        const replyText = response.text || 'Error generando respuesta.';
+        if (!customIntercept) {
+           const dbContext = `\n\nAquí tienes la lista de citas (turnos) guardadas en la base de datos de la clínica actualmente: ${JSON.stringify(clinicConfig.appointments || [])}.
+           \n\nRegla estricta: Si un paciente te pide un turno, una consulta o agendar una cita, DEBES obligatoriamente responderle indicándole que ingrese a este link para escoger su horario: ${clinicConfig.domain}/book/${clinicId}`;
+
+           const response = await ai.models.generateContent({
+             model: 'gemini-2.5-flash',
+             contents: `Mensaje del paciente: "${textMessage}"`,
+             config: {
+                systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}${dbContext}`
+             }
+           });
+           replyText = response.text || 'Error generando respuesta.';
+        }
         
         await sock.sendPresenceUpdate('paused', remoteJid);
         await sock.sendMessage(remoteJid, { text: replyText });
@@ -235,13 +260,15 @@ app.post('/api/simulate', async (req, res) => {
 });
 
 app.post('/api/whatsapp/config', (req, res) => {
-  const { clinicId, botActive, systemPrompt, name } = req.body;
+  const { clinicId, botActive, systemPrompt, name, appointments = [], domain } = req.body;
   if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
   
   waConfigs.set(clinicId, {
      botActive: !!botActive,
      systemPrompt: systemPrompt || '',
-     name: name || 'Clínica'
+     name: name || 'Clínica',
+     domain: domain || 'http://localhost:3000',
+     appointments
   });
   res.json({ success: true });
 });
