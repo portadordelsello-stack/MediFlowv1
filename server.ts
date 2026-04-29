@@ -8,13 +8,44 @@ import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 
-// Initialize AI if API key is present in ENV
-const defaultAi = (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') 
-  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) 
-  : null;
+// Helper to initialize AI from Vertex or API Key
+function getGenAIClient(): GoogleGenAI | null {
+  // 1. Check for Vertex credentials
+  const vertexCredsPath = path.join(process.cwd(), 'wa_clients', 'vertex_credentials.json');
+  if (fs.existsSync(vertexCredsPath)) {
+    try {
+      const creds = JSON.parse(fs.readFileSync(vertexCredsPath, 'utf-8'));
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = vertexCredsPath;
+      return new GoogleGenAI({
+        vertexai: {
+          project: creds.project_id,
+          location: 'us-central1' // Defaulting to us-central1
+        }
+      });
+    } catch (e) {
+      console.error("Error loading Vertex credentials:", e);
+    }
+  }
 
-if (!defaultAi) {
-  console.warn("WARNING: GEMINI_API_KEY is missing in env. Server will fallback to globalSettings API Key on demand.");
+  // 2. Check for GEMINI_API_KEY env var
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
+    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+
+  // 3. Check for locally saved config key
+  const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
+  if (fs.existsSync(configPath)) {
+    try {
+      const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
+      if (savedKey) {
+        return new GoogleGenAI({ apiKey: savedKey });
+      }
+    } catch (e) {
+      console.error("Error fetching local config:", e);
+    }
+  }
+
+  return null;
 }
 
 const PORT = 3000;
@@ -109,20 +140,7 @@ async function startWhatsAppBot(clinicId: string) {
         continue;
       }
 
-      let ai = defaultAi;
-      if (!ai) {
-         try {
-            const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
-            if (fs.existsSync(configPath)) {
-               const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
-               if (savedKey) {
-                  ai = new GoogleGenAI({ apiKey: savedKey });
-               }
-            }
-         } catch (e) {
-            console.error("Error fetching local config:", e);
-         }
-      }
+      let ai = getGenAIClient();
 
       if (!ai) {
           const errorMsg = 'Error interno: La llave de API (API Key) de Gemini no es válida o no se ha configurado. Por favor, revisa la sección Administrador.';
@@ -220,20 +238,7 @@ app.post('/api/simulate', async (req, res) => {
   const { messages, systemPrompt, clinicName } = req.body;
   if (!messages) return res.status(400).json({ error: 'messages is required' });
 
-  let ai = defaultAi;
-  if (!ai) {
-     try {
-        const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
-        if (fs.existsSync(configPath)) {
-           const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
-           if (savedKey) {
-              ai = new GoogleGenAI({ apiKey: savedKey });
-           }
-        }
-     } catch (e) {
-        console.error("Error fetching local config:", e);
-     }
-  }
+  let ai = getGenAIClient();
 
   if (!ai) {
      return res.status(500).json({ error: 'La llave de API (API Key) de Gemini no se ha configurado. Pidele al administrador que la configure.' });
