@@ -4,6 +4,8 @@ import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebas
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
+import { CalendarView } from './CalendarView';
+import { PatientsView } from './PatientsView';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -25,7 +27,7 @@ export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin' | 'pacientes'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -40,6 +42,23 @@ export default function Dashboard({ user }: { user: User }) {
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
   const [allClinics, setAllClinics] = useState<any[]>([]);
+
+  // Patients and Appointments state
+  const [patients, setPatients] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user.uid) return;
+    const unsubPatients = onSnapshot(collection(db, 'clinics', user.uid, 'patients'), snap => {
+      setPatients(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => handleFirestoreError(err, OperationType.GET, `clinics/${user.uid}/patients`));
+    
+    const unsubAppts = onSnapshot(collection(db, 'clinics', user.uid, 'appointments'), snap => {
+      setAppointments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, err => handleFirestoreError(err, OperationType.GET, `clinics/${user.uid}/appointments`));
+
+    return () => { unsubPatients(); unsubAppts(); };
+  }, [user.uid]);
 
   useEffect(() => {
     if (isAdmin && activeTab === 'admin') {
@@ -257,6 +276,14 @@ export default function Dashboard({ user }: { user: User }) {
           </button>
           
           <button 
+            onClick={() => setActiveTab('pacientes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'pacientes' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <UserIcon className="w-5 h-5" />
+            Pacientes
+          </button>
+          
+          <button 
             onClick={() => setActiveTab('flujos')}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'flujos' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
           >
@@ -327,6 +354,7 @@ export default function Dashboard({ user }: { user: User }) {
           <div>
             <h2 className="text-xl font-semibold text-slate-900">
               {activeTab === 'agenda' && 'Agenda de la Clínica'}
+              {activeTab === 'pacientes' && 'Pacientes'}
               {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
               {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
@@ -334,6 +362,7 @@ export default function Dashboard({ user }: { user: User }) {
             <p className="text-sm text-slate-500">
               {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
               {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
+              {activeTab === 'pacientes' && 'Directorio de pacientes de la clínica'}
             </p>
           </div>
         </header>
@@ -342,41 +371,12 @@ export default function Dashboard({ user }: { user: User }) {
           
           {/* TAB: AGENDA */}
           {activeTab === 'agenda' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-               <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                     <Calendar className="w-5 h-5 text-sky-600"/> Calendario
-                  </h3>
-                  {/* Mock Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400 uppercase">
-                     <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
-                  </div>
-                  <div className="grid grid-cols-7 gap-2 text-center">
-                     {Array.from({length: 31}).map((_, i) => (
-                        <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${[4, 12, 18, 25].includes(i) ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
-                           <span>{i + 1}</span>
-                           {[4, 12, 18, 25].includes(i) && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
-                        </div>
-                     ))}
-                  </div>
-               </div>
-               
-               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
-                  <div className="space-y-4 flex-1">
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
-                        <p className="font-semibold text-slate-800">Juan Pérez</p>
-                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
-                     </div>
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
-                        <p className="font-semibold text-slate-800">María López</p>
-                        <p className="text-sm text-slate-500">Revisión de estudios</p>
-                     </div>
-                  </div>
-               </div>
-            </div>
+             <CalendarView user={user} appointments={appointments} patients={patients} />
+          )}
+
+          {/* TAB: PACIENTES */}
+          {activeTab === 'pacientes' && (
+             <PatientsView user={user} patients={patients} />
           )}
 
           {/* TAB: FLUJOS DE RESPUESTA */}
