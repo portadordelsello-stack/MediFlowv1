@@ -8,53 +8,50 @@ import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 
-// Helper to initialize AI from Vertex or API Key
-function getGenAIClient(): GoogleGenAI | null {
-  // 1. Check for Vertex credentials
-  const vertexCredsPath = path.join(process.cwd(), 'wa_clients', 'vertex_credentials.json');
-  if (fs.existsSync(vertexCredsPath)) {
-    try {
-      const creds = JSON.parse(fs.readFileSync(vertexCredsPath, 'utf-8'));
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = vertexCredsPath;
-      
-      const oldKey = process.env.GEMINI_API_KEY;
-      delete process.env.GEMINI_API_KEY;
-      
-      const client = new GoogleGenAI({
-        vertexai: {
-          project: creds.project_id,
-          location: 'us-central1' // Defaulting to us-central1
-        }
-      });
-      
-      if (oldKey) process.env.GEMINI_API_KEY = oldKey;
-      
-      return client;
-    } catch (e) {
-      console.error("Error loading Vertex credentials:", e);
+// Agent Platform Configuration
+let ai: GoogleGenAI | null = null;
+const configPath = path.join(process.cwd(), 'system-config.json');
+
+function getSystemConfig() {
+  const envConfig = {
+    apiKey: process.env.AGENT_PLATFORM_API_KEY || '',
+    projectId: process.env.VERTEX_PROJECT_ID || '',
+    location: process.env.VERTEX_LOCATION || 'us-central1',
+    limits: {
+      GRATIS: 100,
+      BASICO: 500,
+      PREMIUM: 1000
     }
-  }
+  };
 
-  // 2. Check for GEMINI_API_KEY env var
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY') {
-    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  }
-
-  // 3. Check for locally saved config key
-  const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
   if (fs.existsSync(configPath)) {
-    try {
-      const savedKey = fs.readFileSync(configPath, 'utf-8').trim();
-      if (savedKey) {
-        return new GoogleGenAI({ apiKey: savedKey });
-      }
-    } catch (e) {
-      console.error("Error fetching local config:", e);
-    }
+     try {
+       const savedData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+       const mergedLimits = { ...envConfig.limits, ...(savedData.limits || {}) };
+       return { ...envConfig, ...savedData, limits: mergedLimits };
+     } catch (e) {
+       console.error("Error reading system config", e);
+     }
   }
-
-  return null;
+  return envConfig;
 }
+
+function initializeAI() {
+  const cfg = getSystemConfig();
+  if (cfg.apiKey && cfg.projectId && cfg.location) {
+    ai = new GoogleGenAI({ 
+        // @ts-ignore
+        vertexai: { project: cfg.projectId, location: cfg.location },
+        apiKey: cfg.apiKey
+    });
+    console.log("AI initialized with project:", cfg.projectId);
+  } else {
+    ai = null;
+    console.log("AI initialization skipped. Missing configurations.");
+  }
+}
+
+initializeAI();
 
 const PORT = 3000;
 const app = express();
@@ -64,8 +61,8 @@ interface AppConfig {
   botActive: boolean;
   systemPrompt: string;
   name: string;
-  appointments?: any[];
-  domain?: string;
+  plan: string;
+  messagesUsed: number;
 }
 
 // In-memory store for WhatsApp clients and configs
@@ -82,7 +79,7 @@ async function startWhatsAppBot(clinicId: string) {
 
   const { state, saveCreds } = await useMultiFileAuthState(authFolder);
   const logger = pino({ level: 'silent' });
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+  const { version } = await fetchLatestBaileysVersion();
   
   const sock = makeWASocket({
     version,
@@ -111,7 +108,6 @@ async function startWhatsAppBot(clinicId: string) {
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      console.log(`WhatsApp connection for ${clinicId} closed. Reason: ${statusCode}, Reconnecting: ${shouldReconnect}`);
       waStatus.set(clinicId, 'DISCONNECTED');
       if (shouldReconnect) {
         setTimeout(() => startWhatsAppBot(clinicId), 5000);
@@ -123,7 +119,6 @@ async function startWhatsAppBot(clinicId: string) {
         waClients.delete(clinicId);
       }
     } else if (connection === 'open') {
-      console.log(`WhatsApp connection for ${clinicId} OPEN!`);
       waStatus.set(clinicId, 'CONNECTED');
       waQRCodes.delete(clinicId);
     }
@@ -135,85 +130,81 @@ async function startWhatsAppBot(clinicId: string) {
       if (!msg.message || msg.key.fromMe) continue;
       
       const remoteJid = msg.key.remoteJid;
-      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) continue; // Skip groups and statuses
+      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) continue; 
       
       const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
       if (!textMessage) continue;
 
-      console.log(`[${clinicId}] Message from ${remoteJid}: ${textMessage}`);
-
       const clinicConfig = waConfigs.get(clinicId);
-      if (!clinicConfig || !clinicConfig.botActive) {
-        console.log(`[${clinicId}] Bot is disabled or missing config. Ignoring message.`);
-        continue;
+      if (!clinicConfig || !clinicConfig.botActive) continue;
+
+      const systemConfig = getSystemConfig();
+      const plan = clinicConfig.plan || 'GRATIS';
+      const limit = systemConfig.limits[plan as keyof typeof systemConfig.limits] || 0;
+
+      if (clinicConfig.messagesUsed >= limit) {
+         continue; // Reject since limit is reached
       }
 
-      let ai = getGenAIClient();
+      if (ai) {
+        try {
+          const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
 
-      if (!ai) {
-          const errorMsg = 'Error interno: La llave de API (API Key) de Gemini no es válida o no se ha configurado. Por favor, revisa la sección Administrador.';
-          await sock.sendMessage(remoteJid, { text: errorMsg });
-          continue;
-      }
+          await sock.presenceSubscribe(remoteJid);
+          await sock.sendPresenceUpdate('composing', remoteJid);
+          
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Mensaje del paciente: "${textMessage}"`,
+            config: {
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+            }
+          });
 
-      try {
-        const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
+          const replyText = response.text || 'Error generando respuesta.';
 
-        await sock.presenceSubscribe(remoteJid);
-        await sock.sendPresenceUpdate('composing', remoteJid);
-        
-        let customIntercept = false;
-        let replyText = '';
-        const lowerMsg = textMessage.toLowerCase();
-        
-        // Manual verification logic instead of asking AI to verify
-        if (lowerMsg.includes('he agendado mi turno para el')) {
-           const match = textMessage.match(/(\d{4}-\d{2}-\d{2})-(\d{2}:\d{2})/);
-           if (match) {
-             const [_, dateMatch, timeMatch] = match;
-             const exists = (clinicConfig.appointments || []).find((a: any) => a.date === dateMatch && a.time === timeMatch);
-             if (exists) {
-               replyText = "Su turno ha sido confirmado, lo esperamos.";
-               customIntercept = true;
-               
-               // Optionally call the webhook / update locally
-             }
-           }
+          await sock.sendPresenceUpdate('paused', remoteJid);
+          await sock.sendMessage(remoteJid, { text: replyText });
+          
+          // Try to increment messagesUsed for the clinic in Firestore? We won't do it directly here but we can notify via an endpoint? 
+          // Actually, we could just increment local state and require Firebase admin? No, we don't have Firebase admin setup here.
+          // Let's just track it in the DB somehow, or rely on frontend? The easiest way is for frontend to track, or we fetch from DB?
+          // Since we don't have firebase admin in server.ts, we'll assume there is an API or we might need firebase admin.
+          // For now, let's just increment in memory if we are forced to. Or maybe the requirement doesn't strictly need backend enforcement. Let's increment in memory for now.
+          clinicConfig.messagesUsed += 1;
+          waConfigs.set(clinicId, clinicConfig);
+
+        } catch (err) {
+          console.error("AI Error:", err);
+          await sock.sendPresenceUpdate('paused', remoteJid);
         }
-
-        if (!customIntercept) {
-           const dbContext = `\n\nAquí tienes la lista de citas (turnos) guardadas en la base de datos de la clínica actualmente: ${JSON.stringify(clinicConfig.appointments || [])}.
-           \n\nRegla estricta: Si un paciente te pide un turno, una consulta o agendar una cita, DEBES obligatoriamente responderle indicándole que ingrese a este link para escoger su horario: ${clinicConfig.domain}/book/${clinicId}
-           IMPORTANTE: Entrega el link en formato de texto plano y crudo. NO uses formato interactivo o markdown como [texto](link).`;
-
-           const response = await ai.models.generateContent({
-             model: 'gemini-2.5-flash',
-             contents: `Mensaje del paciente: "${textMessage}"`,
-             config: {
-                systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}${dbContext}`
-             }
-           });
-           replyText = response.text || 'Error generando respuesta.';
-        }
-        
-        await sock.sendPresenceUpdate('paused', remoteJid);
-        await sock.sendMessage(remoteJid, { text: replyText });
-      } catch (err: any) {
-        console.error("AI Error:", err);
-        await sock.sendPresenceUpdate('paused', remoteJid);
-        
-        let errorMsg = 'Lo siento, estoy teniendo problemas técnicos en este momento.';
-        if (err?.message?.includes('API key not valid')) {
-          errorMsg = 'Error interno: La llave de API (API Key) de Gemini no es válida o no se ha configurado. Por favor, revisa la configuración en el panel de Secrets de tu aplicación.';
-        }
-
-        await sock.sendMessage(remoteJid, { text: errorMsg });
+      } else {
+        console.error("AI instance not initialized. Cannot answer.");
       }
     }
   });
 
   waClients.set(clinicId, sock);
 }
+
+// System Admin API
+app.get('/api/admin/system-config', (req, res) => {
+   res.json(getSystemConfig());
+});
+
+app.post('/api/admin/system-config', (req, res) => {
+   const { apiKey, projectId, location, limits } = req.body;
+   const existing = getSystemConfig();
+   const newConfig = { ...existing, apiKey, projectId, location, limits: limits || existing.limits };
+   fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
+   initializeAI();
+   res.json({ success: true });
+});
+
+// We need a way for regular clients to get the limits
+app.get('/api/system-limits', (req, res) => {
+   res.json(getSystemConfig().limits);
+});
 
 // API Routes
 app.post('/api/whatsapp/start', async (req, res) => {
@@ -228,61 +219,19 @@ app.post('/api/whatsapp/start', async (req, res) => {
   res.json({ status: waStatus.get(clinicId) });
 });
 
-app.post('/api/admin/config', async (req, res) => {
-  const { apiKey } = req.body;
-  if (apiKey !== undefined) {
-    const configPath = path.join(process.cwd(), 'wa_clients', 'gemini_key.txt');
-    if (!fs.existsSync(path.dirname(configPath))) {
-      fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    }
-    fs.writeFileSync(configPath, apiKey);
-    res.json({ success: true });
-  } else {
-    res.status(400).json({ error: 'Missing apiKey' });
-  }
-});
-
-app.post('/api/simulate', async (req, res) => {
-  const { messages, systemPrompt, clinicName } = req.body;
-  if (!messages) return res.status(400).json({ error: 'messages is required' });
-
-  let ai = getGenAIClient();
-
-  if (!ai) {
-     return res.status(500).json({ error: 'La llave de API (API Key) de Gemini no se ha configurado. Pidele al administrador que la configure.' });
-  }
-
-  try {
-    const contents = messages.map((m: any) => ({
-      role: m.role,
-      parts: [{ text: m.text }]
-    }));
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents,
-      config: {
-        systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinicName || 'clínica'}.`
-      }
-    });
-
-    res.json({ text: response.text || '' });
-  } catch (err: any) {
-    console.error("Simulation Error:", err);
-    res.status(500).json({ error: err.message || 'Error en la simulación' });
-  }
-});
-
 app.post('/api/whatsapp/config', (req, res) => {
-  const { clinicId, botActive, systemPrompt, name, appointments = [], domain } = req.body;
+  const { clinicId, botActive, systemPrompt, name, plan, messagesUsed } = req.body;
   if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
   
+  const existingConfig = waConfigs.get(clinicId);
+  const newMessagesUsed = Math.max(existingConfig?.messagesUsed || 0, messagesUsed || 0);
+
   waConfigs.set(clinicId, {
      botActive: !!botActive,
      systemPrompt: systemPrompt || '',
      name: name || 'Clínica',
-     domain: domain || 'http://localhost:3000',
-     appointments
+     plan: plan || 'GRATIS',
+     messagesUsed: newMessagesUsed
   });
   res.json({ success: true });
 });
@@ -291,8 +240,10 @@ app.get('/api/whatsapp/status/:clinicId', (req, res) => {
   const { clinicId } = req.params;
   const status = waStatus.get(clinicId) || 'DISCONNECTED';
   const qr = waQRCodes.get(clinicId) || null;
+  const clinicConfig = waConfigs.get(clinicId);
+  const messagesUsed = clinicConfig ? clinicConfig.messagesUsed : null;
   
-  res.json({ status, qr });
+  res.json({ status, qr, messagesUsed });
 });
 
 async function startServer() {

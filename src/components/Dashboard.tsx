@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, query, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, X } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
-import AdminPanel from './AdminPanel';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -26,7 +25,7 @@ export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'administracion'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -34,9 +33,69 @@ export default function Dashboard({ user }: { user: User }) {
   const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
   const [simulatorInput, setSimulatorInput] = useState('');
   const [isSimulating, setIsSimulating] = useState(false);
-  const [showQRModal, setShowQRModal] = useState(false);
+  
+  // Admin Config
+  const isAdmin = user.email === 'portadordelsello@gmail.com';
+  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
+  const [savingAdmin, setSavingAdmin] = useState(false);
+  const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
+  const [allClinics, setAllClinics] = useState<any[]>([]);
 
-  const [appointments, setAppointments] = useState<any[]>([]);
+  useEffect(() => {
+    if (isAdmin && activeTab === 'admin') {
+      const unsubscribe = onSnapshot(collection(db, 'clinics'), (snapshot) => {
+         const clinicsList: any[] = [];
+         snapshot.forEach((docItem) => {
+            clinicsList.push({ id: docItem.id, ...docItem.data() });
+         });
+         setAllClinics(clinicsList);
+      }, (error) => {
+         console.error("Error fetching all clinics:", error);
+      });
+      return unsubscribe;
+    }
+  }, [isAdmin, activeTab]);
+
+  const updateClinicPlan = async (clinicId: string, plan: string) => {
+    try {
+      await updateDoc(doc(db, 'clinics', clinicId), { plan, updatedAt: serverTimestamp() });
+    } catch (error) {
+      console.error("Error updating clinic plan:", error);
+    }
+  };
+
+  useEffect(() => {
+     fetch('/api/system-limits').then(r => r.json()).then(data => {
+        if(data) setSystemLimits(data);
+     }).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) {
+       fetch('/api/admin/system-config').then(r => r.json()).then(data => {
+         setAdminConfig(prev => ({ 
+             ...prev, 
+             ...data, 
+             limits: { ...prev.limits, ...(data?.limits || {}) } 
+         }));
+       }).catch(console.error);
+    }
+  }, [isAdmin]);
+
+  const saveAdminConfig = async () => {
+     setSavingAdmin(true);
+     try {
+       await fetch('/api/admin/system-config', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(adminConfig)
+       });
+       alert("Configuración de Agent Platform guardada para todo el sistema.");
+     } catch (err) {
+       console.error(err);
+     }
+     setSavingAdmin(false);
+  };
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -54,25 +113,7 @@ export default function Dashboard({ user }: { user: User }) {
         handleFirestoreError(error, OperationType.GET, `clinics/${user.uid}`);
       }
     );
-
-    const unsubscribeAppointments = onSnapshot(
-      query(collection(db, `clinics/${user.uid}/appointments`), orderBy('date'), orderBy('time')),
-      (snapshot) => {
-        const apps: any[] = [];
-        snapshot.forEach(doc => {
-          apps.push({ id: doc.id, ...doc.data() });
-        });
-        setAppointments(apps);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `clinics/${user.uid}/appointments`);
-      }
-    );
-
-    return () => {
-      unsubscribe();
-      unsubscribeAppointments();
-    };
+    return unsubscribe;
   }, [user.uid]);
 
   // Sync latest config to the WhatsApp server periodically or on change
@@ -86,12 +127,12 @@ export default function Dashboard({ user }: { user: User }) {
           botActive: clinic.botActive,
           systemPrompt: clinic.systemPrompt,
           name: clinic.name,
-          domain: window.location.origin,
-          appointments
+          plan: clinic.plan,
+          messagesUsed: clinic.messagesUsed
         })
       }).catch(console.error);
     }
-  }, [clinic, user.uid, appointments]);
+  }, [clinic, user.uid]);
 
   // Poll for WhatsApp connection status
   useEffect(() => {
@@ -102,6 +143,16 @@ export default function Dashboard({ user }: { user: User }) {
           const data = await res.json();
           setWaStatus(data.status);
           setQrCode(data.qr);
+          if (data.messagesUsed != null && clinic && data.messagesUsed > (clinic.messagesUsed || 0)) {
+             let updates: any = { messagesUsed: data.messagesUsed, updatedAt: serverTimestamp() };
+             // If limit reached, automatically deactivate bot
+             const currentPlan = clinic.plan || 'GRATIS';
+             const planLimit = systemLimits[currentPlan as keyof typeof systemLimits] || 0;
+             if (data.messagesUsed >= planLimit && clinic.botActive) {
+                updates.botActive = false;
+             }
+             await updateDoc(doc(db, 'clinics', user.uid), updates).catch(console.error);
+          }
         }
       } catch (err) {}
     };
@@ -109,7 +160,7 @@ export default function Dashboard({ user }: { user: User }) {
     const interval = setInterval(fetchStatus, 3000);
     fetchStatus();
     return () => clearInterval(interval);
-  }, [user.uid]);
+  }, [user.uid, clinic, systemLimits]);
 
   const startWhatsApp = async () => {
     try {
@@ -126,6 +177,8 @@ export default function Dashboard({ user }: { user: User }) {
 
   const toggleBotActive = async () => {
     if (!clinic) return;
+    if (!clinic.botActive && isLimitReached) return;
+    
     await updateDoc(doc(db, 'clinics', user.uid), {
       botActive: !clinic.botActive,
       updatedAt: serverTimestamp()
@@ -146,42 +199,37 @@ export default function Dashboard({ user }: { user: User }) {
   };
 
   const handleUpgrade = async () => {
-    alert("Pronto integraremos Stripe para el upgrade a $160 USD.");
+    alert("Pronto integraremos Stripe para actualizar tu suscripción.");
   };
+
+  const currentPlan = clinic?.plan || 'GRATIS';
+  const planLimit = systemLimits[currentPlan as keyof typeof systemLimits] || 0;
+  const messagesUsed = clinic?.messagesUsed || 0;
+  const isLimitReached = messagesUsed >= planLimit;
 
   const handleSimulate = async () => {
     if (!simulatorInput.trim()) return;
     const newMsg = { role: 'user' as const, text: simulatorInput };
-    const messagesToSend = [...simulatorMessages, newMsg];
-    
     setSimulatorMessages(prev => [...prev, newMsg]);
     setSimulatorInput('');
     setIsSimulating(true);
     
     try {
-      const res = await fetch('/api/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: messagesToSend,
-          systemPrompt,
-          clinicName: clinic?.name
-        })
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+          { role: 'user', parts: [{ text: newMsg.text }] }
+        ],
+        config: {
+          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
+        }
       });
-      const data = await res.json();
-
-      if (!res.ok) {
-         throw new Error(data.error || 'Server error');
-      }
-
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: data.text || '' }]);
-    } catch (e: any) {
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
+    } catch (e) {
       console.error(e);
-      let errorText = e.message || 'Error en la simulación.';
-      if (errorText.includes('API key not valid')) {
-         errorText = 'Error interno: La llave de API (API Key) de Gemini no es válida o no está configurada.';
-      }
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: errorText }]);
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
     }
     setIsSimulating(false);
   };
@@ -231,14 +279,14 @@ export default function Dashboard({ user }: { user: User }) {
             <UserIcon className="w-5 h-5" />
             Perfil
           </button>
-          
-          {user.email === 'portadordelsello@gmail.com' && (
+
+          {isAdmin && (
             <button 
-              onClick={() => setActiveTab('administracion')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'administracion' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+              onClick={() => setActiveTab('admin')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'admin' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
             >
-              <ShieldCheck className="w-5 h-5" />
-              Administración
+              <Lock className="w-5 h-5" />
+              Admin Sistema
             </button>
           )}
         </nav>
@@ -249,7 +297,7 @@ export default function Dashboard({ user }: { user: User }) {
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Status</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             </div>
-            <p className="text-xs text-emerald-800 font-medium">{clinic?.plan === 'MONTHLY' ? 'Plan Mensual' : 'Prueba de 14 Días'}</p>
+            <p className="text-xs text-emerald-800 font-medium">Plan {currentPlan}</p>
           </div>
 
            <div className="flex items-center gap-3 px-2 mb-4">
@@ -282,7 +330,6 @@ export default function Dashboard({ user }: { user: User }) {
               {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
               {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
-              {activeTab === 'administracion' && 'Panel de Administración'}
             </h2>
             <p className="text-sm text-slate-500">
               {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
@@ -324,27 +371,18 @@ export default function Dashboard({ user }: { user: User }) {
                </div>
                
                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center justify-between">
-                    <span>Citas</span>
-                    <a href={`/book/${user.uid}`} target="_blank" rel="noreferrer" className="text-sm font-semibold text-sky-600 hover:underline">Ver página de reservas</a>
-                  </h3>
+                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
                   <div className="space-y-4 flex-1">
-                     {appointments.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-10">No hay citas registradas</p>
-                     ) : (
-                        appointments.map((apt: any) => (
-                           <div key={apt.id} className={`p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 ${apt.status === 'confirmed' ? 'border-l-emerald-500' : 'border-l-sky-500'}`}>
-                              <p className="text-xs font-bold text-slate-400 mb-1">{apt.date} - {apt.time}h</p>
-                              <p className="font-semibold text-slate-800">{apt.patientName}</p>
-                              <p className="text-sm text-slate-500 flex justify-between items-center">
-                                 <span>DNI: {apt.patientDni}</span>
-                                 <span className={`text-xs px-2 py-0.5 rounded-full ${apt.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
-                                    {apt.status === 'confirmed' ? 'Confirmado' : 'Pendiente'}
-                                 </span>
-                              </p>
-                           </div>
-                        ))
-                     )}
+                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
+                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
+                        <p className="font-semibold text-slate-800">Juan Pérez</p>
+                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
+                     </div>
+                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
+                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
+                        <p className="font-semibold text-slate-800">María López</p>
+                        <p className="text-sm text-slate-500">Revisión de estudios</p>
+                     </div>
                   </div>
                </div>
             </div>
@@ -400,28 +438,14 @@ export default function Dashboard({ user }: { user: User }) {
 
               {/* SIMULADOR WHATSAPP */}
               <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
-                 <div className="bg-[#00a884] text-white p-4 flex items-center justify-between shrink-0 shadow-sm z-10">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
-                         <Bot className="w-6 h-6" />
-                      </div>
-                      <div>
-                         <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
-                         <p className="text-[11px] text-emerald-100">Simulador (IA aislada) / Modo Producción</p>
-                      </div>
+                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
+                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
+                       <Bot className="w-6 h-6" />
                     </div>
-                    <button
-                      onClick={() => {
-                        setShowQRModal(true);
-                        if (waStatus === 'DISCONNECTED') {
-                          startWhatsApp();
-                        }
-                      }}
-                      className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-[13px] font-semibold rounded-lg transition-colors flex items-center gap-2 border border-white/20"
-                    >
-                      <QrCode className="w-4 h-4"/>
-                      <span className="hidden sm:inline">Conectar WPP</span>
-                    </button>
+                    <div>
+                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
+                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
+                    </div>
                  </div>
                  
                  <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
@@ -536,36 +560,30 @@ export default function Dashboard({ user }: { user: User }) {
                   )}
                 </div>
                 
-                <div className="border-t border-slate-100 pt-6 mt-6">
-                  <h4 className="font-semibold text-slate-900 text-sm mb-2">Número de WhatsApp de la Clínica</h4>
-                  <p className="text-xs text-slate-500 mb-4">Este es el número al que los pacientes enviarán mensajes para confirmar sus turnos. Ingresa el código de país sin el signo +, por ejemplo: 5493424638046.</p>
-                  
-                  <div className="flex gap-4">
-                     <input 
-                       type="text" 
-                       value={clinic?.whatsappNumber || ''}
-                       onChange={(e) => {
-                         const val = e.target.value.replace(/[^0-9]/g, '');
-                         updateDoc(doc(db, 'clinics', user.uid), { whatsappNumber: val });
-                       }}
-                       placeholder="Ej. 5493424638046"
-                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-sky-500"
-                     />
+                <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-slate-900 text-sm">Activar Motor de Respuestas (Bot AI)</h4>
+                      <p className="text-xs text-slate-500">Permite que Gemini comience a responder auto-mágicamente.</p>
+                      {isLimitReached && (
+                        <p className="text-xs text-red-500 font-medium mt-1">Límite de mensajes alcanzado ({messagesUsed}/{planLimit}).</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {isLimitReached && (
+                         <button onClick={handleUpgrade} className="px-3 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-700 text-xs font-bold rounded-lg transition-colors">
+                            Actualizar Suscripción
+                         </button>
+                      )}
+                      <button
+                        onClick={toggleBotActive}
+                        disabled={waStatus !== 'CONNECTED' || isLimitReached}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${(clinic?.botActive && !isLimitReached) ? 'bg-sky-500' : 'bg-slate-300'} ${(waStatus !== 'CONNECTED' || isLimitReached) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(clinic?.botActive && !isLimitReached) ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="border-t border-slate-100 pt-6 mt-6 flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-slate-900 text-sm">Activar Motor de Respuestas (Bot AI)</h4>
-                    <p className="text-xs text-slate-500">Permite que Gemini comience a responder auto-mágicamente.</p>
-                  </div>
-                  <button
-                    onClick={toggleBotActive}
-                    disabled={waStatus !== 'CONNECTED'}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${clinic?.botActive ? 'bg-sky-500' : 'bg-slate-300'} ${waStatus !== 'CONNECTED' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${clinic?.botActive ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
                 </div>
               </div>
             </div>
@@ -602,28 +620,26 @@ export default function Dashboard({ user }: { user: User }) {
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-6 mb-6">
                      <div className="flex justify-between items-center mb-4">
                         <span className="px-3 py-1 bg-sky-100 text-sky-700 text-xs font-bold rounded uppercase tracking-wider">
-                           {clinic?.plan === 'MONTHLY' ? 'Plan PRO' : 'Prueba Gratuita'}
+                           Plan {currentPlan}
                         </span>
-                        {clinic?.plan !== 'MONTHLY' && clinic?.trialEndsAt && (
-                           <span className="text-sm font-medium text-slate-600">
-                             Vence: {new Date(clinic.trialEndsAt).toLocaleDateString()}
-                           </span>
-                        )}
+                        <span className="text-sm font-medium text-slate-600">
+                          Mensajes {messagesUsed} / {planLimit}
+                        </span>
                      </div>
                      <p className="text-slate-800 font-medium text-lg">
-                        {clinic?.plan === 'MONTHLY' ? 'Renovación automática mensual' : '14 Días de automatización ilimitada con Gemini y WhatsApp.'}
+                        {currentPlan === 'GRATIS' && 'Automatización básica. Actualiza para desbloquear más mensajes.'}
+                        {currentPlan === 'BASICO' && 'Ideal para clínicas en crecimiento.'}
+                        {currentPlan === 'PREMIUM' && 'Mensajes de alto volumen y soporte prioritario.'}
                      </p>
                   </div>
 
-                  {clinic?.plan !== 'MONTHLY' && (
-                     <button 
-                        onClick={handleUpgrade}
-                        className="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-                     >
-                        <CreditCard className="w-5 h-5" />
-                        Subir a Plan Mensual ($160 USD)
-                     </button>
-                  )}
+                  <button 
+                     onClick={handleUpgrade}
+                     className="w-full bg-sky-600 hover:bg-sky-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                     <CreditCard className="w-5 h-5" />
+                     Actualizar Suscripción
+                  </button>
                </div>
 
                <div className="p-4 border border-red-200 bg-red-50 rounded-2xl">
@@ -643,83 +659,143 @@ export default function Dashboard({ user }: { user: User }) {
             </div>
           )}
 
-          {/* TAB: ADMINISTRACION */}
-          {activeTab === 'administracion' && user.email === 'portadordelsello@gmail.com' && (
-            <AdminPanel />
+          {/* TAB: ADMIN */}
+          {isAdmin && activeTab === 'admin' && (
+            <div className="max-w-2xl mx-auto space-y-8 animate-fade-in-up">
+              <div className="bg-white border border-indigo-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
+                  <Lock className="w-48 h-48 text-indigo-900" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
+                    <Lock className="w-6 h-6 text-indigo-600" />
+                    Panel de Administración Global
+                  </h3>
+                  <p className="text-sm text-slate-500 mb-8 max-w-lg">
+                    Configuración a nivel de sistema. Modificar estos valores afectará a **todas** las clínicas conectadas.
+                  </p>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Agent Platform API Key
+                      </label>
+                      <input 
+                        type="password" 
+                        value={adminConfig.apiKey}
+                        onChange={e => setAdminConfig({...adminConfig, apiKey: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        placeholder="AIzaSy..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Vertex AI Project ID
+                      </label>
+                      <input 
+                        type="text" 
+                        value={adminConfig.projectId}
+                        onChange={e => setAdminConfig({...adminConfig, projectId: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        placeholder="tu-id-de-proyecto-gcp"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Vertex AI Location
+                      </label>
+                      <input 
+                        type="text" 
+                        value={adminConfig.location}
+                        onChange={e => setAdminConfig({...adminConfig, location: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        placeholder="us-central1"
+                      />
+                    </div>
+                    
+                    <div className="border-t border-slate-200 pt-6 mt-6">
+                      <h4 className="font-semibold text-slate-900 mb-4">Límites de Suscripción (Mensajes)</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">GRATIS</label>
+                          <input 
+                            type="number" 
+                            value={adminConfig.limits.GRATIS}
+                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, GRATIS: parseInt(e.target.value) || 0 }})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">BÁSICO</label>
+                          <input 
+                            type="number" 
+                            value={adminConfig.limits.BASICO}
+                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, BASICO: parseInt(e.target.value) || 0 }})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">PREMIUM</label>
+                          <input 
+                            type="number" 
+                            value={adminConfig.limits.PREMIUM}
+                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, PREMIUM: parseInt(e.target.value) || 0 }})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={saveAdminConfig}
+                      disabled={savingAdmin}
+                      className="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {savingAdmin ? 'Guardando...' : 'Guardar Configuración Global'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Clinics List */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                 <div className="p-6 border-b border-slate-100 bg-slate-50">
+                    <h3 className="font-bold text-slate-900">Cuentas (Clínicas)</h3>
+                    <p className="text-sm text-slate-500">Administra las suscripciones de los usuarios registrados.</p>
+                 </div>
+                 <div className="divide-y divide-slate-100">
+                    {allClinics.map(c => (
+                       <div key={c.id} className="p-6 flex flex-col md:flex-row items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                          <div className="flex-1">
+                             <h4 className="font-semibold text-slate-900">{c.name || 'Sin Nombre'}</h4>
+                             <p className="text-xs text-slate-500">ID: {c.ownerId} • Bot: {c.botActive ? 'Activado' : 'Desactivado'}</p>
+                             <div className="mt-2 text-sm text-slate-600 font-medium">
+                                Mensajes Usados: <span className={c.messagesUsed >= (systemLimits[c.plan as keyof typeof systemLimits] || 0) ? 'text-red-600' : 'text-emerald-600'}>{c.messagesUsed || 0}</span> / {systemLimits[c.plan as keyof typeof systemLimits] || 0}
+                             </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                             <select
+                                value={c.plan || 'GRATIS'}
+                                onChange={(e) => updateClinicPlan(c.id, e.target.value)}
+                                className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                             >
+                                <option value="GRATIS">GRATIS</option>
+                                <option value="BASICO">BÁSICO</option>
+                                <option value="PREMIUM">PREMIUM</option>
+                             </select>
+                          </div>
+                       </div>
+                    ))}
+                    {allClinics.length === 0 && (
+                       <div className="p-8 text-center text-slate-500 text-sm">
+                          No hay clínicas registradas.
+                       </div>
+                    )}
+                 </div>
+              </div>
+            </div>
           )}
         </div>
-
-        {/* QR Modal when triggered from Connect Button */}
-        {showQRModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 relative">
-              <button onClick={() => setShowQRModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-              
-              <div className="text-center mb-6">
-                <h3 className="text-xl font-bold text-slate-900">Conexión de WhatsApp</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Enlaza tu dispositivo para que la IA responda.
-                </p>
-              </div>
-
-              <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-200 rounded-xl min-h-[250px]">
-                  {waStatus === 'DISCONNECTED' && (
-                    <div className="text-center">
-                      <QrCode className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                      <button 
-                        onClick={startWhatsApp}
-                        className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800"
-                      >
-                        Generar QR de WhatsApp
-                      </button>
-                    </div>
-                  )}
-
-                  {waStatus === 'INITIALIZING' && (
-                    <div className="text-center">
-                      <div className="w-10 h-10 border-4 border-sky-100 border-t-sky-600 rounded-full animate-spin mx-auto mb-4"></div>
-                      <p className="text-slate-600 font-medium text-sm">Generando código seguro...</p>
-                    </div>
-                  )}
-
-                  {waStatus === 'QR_READY' && qrCode && (
-                    <div className="text-center animate-fade-in">
-                      <div className="relative p-3 border-4 border-slate-50 rounded-xl bg-white shadow-inner mb-4 inline-block">
-                        <img src={qrCode} alt="WhatsApp QR Code" className="w-48 h-48" />
-                      </div>
-                      <p className="text-slate-600 text-sm font-medium">1. Abre WhatsApp en tu celular.</p>
-                      <p className="text-slate-500 text-xs mt-1">2. Configuración &gt; Dispositivos Vinculados.</p>
-                      <p className="text-slate-500 text-xs mt-1">3. Escanea este código para conectar.</p>
-                    </div>
-                  )}
-
-                  {waStatus === 'CONNECTED' && (
-                    <div className="text-center">
-                       <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <MessageCircle className="w-6 h-6" />
-                       </div>
-                       <h4 className="text-base font-bold text-slate-900 mb-1">Línea Conectada</h4>
-                       <p className="text-slate-500 text-xs">
-                          La IA ya puede escuchar tus mensajes.
-                       </p>
-                    </div>
-                  )}
-              </div>
-
-               {waStatus === 'CONNECTED' && (
-                  <button 
-                    onClick={() => setShowQRModal(false)}
-                    className="w-full mt-6 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
-                  >
-                    Cerrar y continuar
-                  </button>
-               )}
-            </div>
-          </div>
-        )}
-
       </main>
     </div>
   );

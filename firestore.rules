@@ -6,25 +6,26 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    function isAdmin() { return request.auth != null && request.auth.token.email == 'portadordelsello@gmail.com'; }
     function isSignedIn() { return request.auth != null && request.auth.token.email_verified == true; }
-    function isAdmin() { return isSignedIn() && request.auth.token.email == 'portadordelsello@gmail.com'; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
 
     function isValidClinic(data) {
-      return data.keys().hasAll(['ownerId', 'name', 'specialty', 'plan', 'trialEndsAt', 'createdAt', 'updatedAt', 'botActive', 'whatsappSessionStatus']) &&
-             data.keys().size() >= 9 && data.keys().size() <= 10 &&
-             data.ownerId is string && data.ownerId.size() <= 128 && data.ownerId == request.auth.uid &&
+      return data.keys().hasAll(['ownerId', 'name', 'specialty', 'plan', 'createdAt', 'updatedAt', 'botActive', 'whatsappSessionStatus']) &&
+             data.keys().size() >= 8 && data.keys().size() <= 12 &&
+             data.ownerId is string && data.ownerId.size() <= 128 && (data.ownerId == request.auth.uid || isAdmin()) &&
              data.name is string && data.name.size() <= 100 &&
              data.specialty is string && data.specialty.size() <= 100 &&
-             data.plan in ['TRIAL', 'MONTHLY'] &&
-             data.trialEndsAt is number &&
+             data.plan in ['GRATIS', 'BASICO', 'PREMIUM', 'TRIAL', 'MONTHLY'] &&
+             (!('trialEndsAt' in data) || data.trialEndsAt is number) &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
              data.botActive is bool &&
              data.whatsappSessionStatus in ['DISCONNECTED', 'CONNECTED', 'QR_READY'] &&
-             (!('systemPrompt' in data) || (data.systemPrompt is string && data.systemPrompt.size() <= 5000));
+             (!('systemPrompt' in data) || (data.systemPrompt is string && data.systemPrompt.size() <= 5000)) &&
+             (!('messagesUsed' in data) || data.messagesUsed is number);
     }
 
     function isValidPatient(data) {
@@ -59,59 +60,62 @@ service cloud.firestore {
              data.timestamp is number;
     }
 
-    function isValidGlobalSettings(data) {
-      return data.keys().hasAll(['geminiApiKey', 'updatedAt']) &&
-             data.keys().size() <= 3 &&
-             data.geminiApiKey is string && data.geminiApiKey.size() <= 200 &&
-             data.updatedAt is timestamp;
-    }
-
-    match /globalSettings/{documentId} {
-      allow get: if isAdmin();
-      allow list: if isAdmin();
-      allow create: if isAdmin() && isValidGlobalSettings(incoming()) && incoming().updatedAt == request.time;
-      allow update: if isAdmin() && isValidGlobalSettings(incoming()) && incoming().updatedAt == request.time;
-      allow delete: if false;
-    }
-
     match /clinics/{clinicId} {
-      allow get: if true;
-      allow list: if (isSignedIn() && resource.data.ownerId == request.auth.uid) || isAdmin();
+      allow get: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
       
       allow create: if isSignedIn() && isValidId(clinicId) && request.auth.uid == clinicId &&
                        isValidClinic(incoming()) &&
                        incoming().createdAt == request.time &&
                        incoming().updatedAt == request.time;
                        
-      allow update: if (isSignedIn() && isValidId(clinicId) && clinicId == request.auth.uid &&
+      allow update: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin()) &&
                        isValidClinic(incoming()) &&
                        incoming().ownerId == existing().ownerId &&
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt == request.time &&
                        (
-                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'whatsappSessionStatus', 'systemPrompt']))
-                       )) || (isAdmin() && isValidClinic(incoming()) && incoming().updatedAt == request.time && incoming().ownerId == existing().ownerId && incoming().createdAt == existing().createdAt);
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'whatsappSessionStatus', 'systemPrompt', 'messagesUsed'])) || isAdmin()
+                       );
                        
-      allow delete: if (isSignedIn() && isValidId(clinicId) && clinicId == request.auth.uid) || isAdmin();
+      allow delete: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
 
       match /patients/{patientId} {
-         allow get: if true;
+         allow get: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
          allow list: if isSignedIn() && clinicId == request.auth.uid;
          
-         allow create: if true;
+         allow create: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid &&
+                          isValidPatient(incoming()) &&
+                          incoming().createdAt == request.time &&
+                          incoming().updatedAt == request.time;
                           
-         allow update: if true;
+         allow update: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid &&
+                          isValidPatient(incoming()) &&
+                          incoming().clinicOwnerId == existing().clinicOwnerId &&
+                          incoming().createdAt == existing().createdAt &&
+                          incoming().updatedAt == request.time &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name']);
                           
          allow delete: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
       }
 
       match /appointments/{appointmentId} {
-         allow get: if true;
+         allow get: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid;
          allow list: if isSignedIn() && clinicId == request.auth.uid;
          
-         allow create: if true;
+         allow create: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid &&
+                          isValidAppointment(incoming()) &&
+                          exists(/databases/$(database)/documents/clinics/$(clinicId)/patients/$(incoming().patientId)) &&
+                          incoming().createdAt == request.time &&
+                          incoming().updatedAt == request.time;
                           
-         allow update: if true;
+         allow update: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid &&
+                          isValidAppointment(incoming()) &&
+                          incoming().clinicOwnerId == existing().clinicOwnerId &&
+                          incoming().patientId == existing().patientId &&
+                          incoming().createdAt == existing().createdAt &&
+                          incoming().updatedAt == request.time &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'date', 'status']);
                           
          allow delete: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid;
       }
