@@ -29,24 +29,30 @@ service cloud.firestore {
     }
 
     function isValidPatient(data) {
-      return data.keys().hasAll(['clinicOwnerId', 'phone', 'createdAt', 'updatedAt']) &&
-             data.keys().size() >= 4 && data.keys().size() <= 5 &&
+      return data.keys().hasAll(['clinicOwnerId', 'name', 'phone', 'createdAt', 'updatedAt']) &&
+             data.keys().size() >= 5 && data.keys().size() <= 8 &&
              data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && data.clinicOwnerId == request.auth.uid &&
+             data.name is string && data.name.size() <= 100 &&
              data.phone is string && data.phone.size() <= 20 &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
-             (!('name' in data) || (data.name is string && data.name.size() <= 100));
+             (!('dni' in data) || (data.dni is string && data.dni.size() <= 20)) &&
+             (!('obraSocial' in data) || (data.obraSocial is string && data.obraSocial.size() <= 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 200));
     }
 
     function isValidAppointment(data) {
       return data.keys().hasAll(['clinicOwnerId', 'patientId', 'date', 'status', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 6 &&
+             data.keys().size() >= 6 && data.keys().size() <= 9 &&
              data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && data.clinicOwnerId == request.auth.uid &&
              data.patientId is string && data.patientId.size() <= 128 &&
              data.date is string && data.date.size() <= 50 &&
              data.status in ['SCHEDULED', 'CONFIRMED', 'CANCELLED', 'COMPLETED'] &&
              data.createdAt is timestamp &&
-             data.updatedAt is timestamp;
+             data.updatedAt is timestamp &&
+             (!('time' in data) || (data.time is string && data.time.size() <= 10)) &&
+             (!('type' in data) || (data.type is string && data.type.size() <= 100)) &&
+             (!('patientName' in data) || (data.patientName is string && data.patientName.size() <= 100));
     }
 
     function isValidMessage(data) {
@@ -94,7 +100,7 @@ service cloud.firestore {
                           incoming().clinicOwnerId == existing().clinicOwnerId &&
                           incoming().createdAt == existing().createdAt &&
                           incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'dni', 'obraSocial', 'address']);
                           
          allow delete: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
       }
@@ -115,7 +121,7 @@ service cloud.firestore {
                           incoming().patientId == existing().patientId &&
                           incoming().createdAt == existing().createdAt &&
                           incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'date', 'status']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'date', 'status', 'time', 'type', 'patientName']);
                           
          allow delete: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid;
       }

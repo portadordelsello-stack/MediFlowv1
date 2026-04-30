@@ -68,14 +68,12 @@ function App() {
     if (!user || !clinicName || !specialty) return;
     setSavingSettings(true);
     try {
-      const trialEndsAt = Date.now() + 14 * 24 * 60 * 60 * 1000;
       await setDoc(doc(db, 'clinics', user.uid), {
         ownerId: user.uid,
         name: clinicName,
         specialty,
         plan: 'GRATIS',
         messagesUsed: 0,
-        trialEndsAt,
         botActive: false,
         whatsappSessionStatus: 'DISCONNECTED',
         createdAt: serverTimestamp(),
@@ -100,7 +98,7 @@ function App() {
              <div className="w-10 h-10 bg-sky-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm">
                 M
              </div>
-             <span className="text-xl font-bold tracking-tight text-slate-900">MediFlow</span>
+             <span className="text-xl font-bold tracking-tight text-slate-900">MediFlex</span>
           </div>
           <nav className="flex items-center gap-4">
              <button 
@@ -129,7 +127,7 @@ function App() {
                  Tu recepcionista virtual, <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600">disponible 24/7 en WhatsApp.</span>
               </h1>
               <p className="text-lg lg:text-xl text-slate-500 leading-relaxed mb-10 max-w-2xl">
-                 Convierte más consultas en citas agendadas automáticamente. Conecta tu WhatsApp en segundos, entrena a la IA con tus reglas y deja que MediFlow maneje tu agenda por ti.
+                 Convierte más consultas en citas agendadas automáticamente. Conecta tu WhatsApp en segundos, entrena a la IA con tus reglas y deja que MediFlex maneje tu agenda por ti.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
@@ -137,7 +135,7 @@ function App() {
                    onClick={() => setShowLoginModal(true)}
                    className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-semibold text-lg py-4 px-8 rounded-xl transition-all shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.16)] flex items-center justify-center gap-2"
                  >
-                   Comenzar prueba de 14 días
+                   Crear cuenta gratis
                  </button>
                  <button 
                    onClick={login}
@@ -183,6 +181,52 @@ function App() {
                  </p>
               </div>
            </div>
+
+           {/* PRICING */}
+           <div className="max-w-5xl mx-auto border-t border-slate-100 pt-20 mt-20 text-center animate-fade-in-up md:animate-none">
+              <h2 className="text-3xl font-bold text-slate-900 mb-4">Elige el plan ideal para tu clínica</h2>
+              <p className="text-slate-500 mb-12 max-w-2xl mx-auto">Comienza automatizando ahora y mejora tu plan a medida que creces.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                 <div className="bg-white border border-slate-200 p-8 rounded-3xl transition-transform hover:-translate-y-1 shadow-sm flex flex-col text-left">
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">GRATIS</h3>
+                    <p className="text-slate-500 text-sm mb-6">Ideal para probar la IA en tu clínica.</p>
+                    <div className="text-4xl font-extrabold text-slate-900 mb-6">$0<span className="text-lg text-slate-500 font-normal">/mes</span></div>
+                    <ul className="space-y-3 mb-8 flex-1">
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Bots AI auto-regulados</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Integración WhatsApp Web</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 100 mensajes límite mensuales</li>
+                    </ul>
+                    <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Empezar gratis</button>
+                 </div>
+
+                 <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl transition-transform hover:-translate-y-1 shadow-xl flex flex-col text-left relative transform md:-translate-y-4">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-sky-500 text-white px-3 py-1 rounded-full text-xs font-bold tracking-wider">MÁS POPULAR</div>
+                    <h3 className="text-xl font-bold text-white mb-2">BÁSICO</h3>
+                    <p className="text-slate-400 text-sm mb-6">Para clínicas en crecimiento estable.</p>
+                    <div className="text-4xl font-extrabold text-white mb-6">$39<span className="text-lg text-slate-400 font-normal">/mes</span></div>
+                    <ul className="space-y-3 mb-8 flex-1">
+                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Todo lo de GRATIS</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Instrucciones personalizadas de IA</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> 500 mensajes límite mensuales</li>
+                    </ul>
+                    <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
+                 </div>
+
+                 <div className="bg-white border border-slate-200 p-8 rounded-3xl transition-transform hover:-translate-y-1 shadow-sm flex flex-col text-left">
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">PREMIUM</h3>
+                    <p className="text-slate-500 text-sm mb-6">Flujo de mensajería ininterrumpida.</p>
+                    <div className="text-4xl font-extrabold text-slate-900 mb-6">$89<span className="text-lg text-slate-500 font-normal">/mes</span></div>
+                    <ul className="space-y-3 mb-8 flex-1">
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Todo lo de BÁSICO</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Agendamiento automático global</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 1000 mensajes límite mensuales</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Soporte prioritario 24/7</li>
+                    </ul>
+                    <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Elegir Premium</button>
+                 </div>
+              </div>
+           </div>
         </main>
 
         {/* Login Modal */}
@@ -196,7 +240,7 @@ function App() {
                    <div className="w-12 h-12 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center mx-auto mb-4">
                       <ShieldCheck className="w-6 h-6" />
                    </div>
-                   <h3 className="text-xl font-bold text-slate-900">Activa tus 14 días gratis</h3>
+                   <h3 className="text-xl font-bold text-slate-900">Empezar gratis</h3>
                    <p className="text-sm text-slate-500 mt-2">Conecta tu cuenta de Google para comenzar a automatizar.</p>
                 </div>
                 <button 
