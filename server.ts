@@ -165,7 +165,7 @@ async function startWhatsAppBot(clinicId: string) {
         try {
           const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
 
-          const firestoreTools = [
+          const firestoreTools: any[] = [
             {
               functionDeclarations: [
                 {
@@ -195,11 +195,13 @@ async function startWhatsAppBot(clinicId: string) {
                 },
                 {
                   name: "queryCollection",
-                  description: "Lee documentos de una colección en la base de datos Firestore",
+                  description: "Lee documentos de una colección en la base de datos Firestore con filtros opcionales",
                   parameters: {
                     type: "OBJECT",
                     properties: {
-                      collectionPath: { type: "STRING" }
+                      collectionPath: { type: "STRING" },
+                      filterField: { type: "STRING", description: "Campo por el que filtrar" },
+                      filterValue: { type: "STRING", description: "Valor del filtro" }
                     },
                     required: ["collectionPath"]
                   }
@@ -221,7 +223,21 @@ async function startWhatsAppBot(clinicId: string) {
               model: 'gemini-2.5-flash',
               contents: chatContents,
               config: {
-                systemInstruction: `Eres el agente inteligente de una clínica médica. Tienes acceso a la base de datos de paciente y registros. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`,
+                systemInstruction: `Eres el agente inteligente de una clínica médica. Tienes acceso a la base de datos de pacientes y registros. El nombre de la clínica es "${clinicConfig.name}".
+                
+                TAREAS PRINCIPALES:
+                1. Soporte y dudas generales.
+                2. AGENDAMIENTO: Si el paciente quiere un turno, DEBES enviarle este link de reserva invitándolo a elegir su horario: https://ais-pre-ehopkotmw3y7cv2ex33n43-565007411087.us-east1.run.app/book/${clinicId}
+                3. CONFIRMACIÓN: Si recibes un mensaje estructurado como "He reservado el YYYY-MM-DD a las HH:mm", debes:
+                   - Buscar el turno correspondiente en la colección "appointments" de esta clínica.
+                   - Marcar su estado como "CONFIRMED".
+                   - Confirmar al paciente que su turno ha sido validado con éxito.
+                
+                REGLAS DE SEGURIDAD:
+                - Solo puedes leer/escribir en el path "/clinics/${clinicId}/...".
+                - Sé sumamente cordial y profesional.
+                
+                Instrucciones adicionales de la clínica: ${systemPrompt}`,
                 tools: firestoreTools
               }
             });
@@ -250,7 +266,11 @@ async function startWhatsAppBot(clinicId: string) {
                      fResData = { success: true, id: added.id };
                    }
                 } else if (callName === 'queryCollection') {
-                   const docsSnap = await adminDb.collection(args.collectionPath).limit(50).get();
+                   let q: any = adminDb.collection(args.collectionPath);
+                   if (args.filterField && args.filterValue) {
+                     q = q.where(args.filterField, '==', args.filterValue);
+                   }
+                   const docsSnap = await q.limit(50).get();
                    fResData = docsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
                 } else {
                    fResData = { error: "Unknown function" };

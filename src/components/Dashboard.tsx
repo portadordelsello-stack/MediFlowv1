@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Phone, HeartPulse } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -21,11 +21,19 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
+interface AppConfig {
+  botActive: boolean;
+  systemPrompt: string;
+  name: string;
+  plan: string;
+  messagesUsed: number;
+}
+
 export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -39,7 +47,30 @@ export default function Dashboard({ user }: { user: User }) {
   const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
+  const [waConfigs, setWaConfigs] = useState<Map<string, AppConfig>>(new Map());
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
   const [allClinics, setAllClinics] = useState<any[]>([]);
+  const [selectedAgendaDate, setSelectedAgendaDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+  const [agendaCurrentMonth, setAgendaCurrentMonth] = useState(new Date());
+
+  useEffect(() => {
+    if (user.uid && activeTab === 'agenda') {
+      const unsubscribe = onSnapshot(collection(db, 'clinics', user.uid, 'appointments'), (snap) => {
+        setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return unsubscribe;
+    }
+  }, [user.uid, activeTab]);
+
+  useEffect(() => {
+    if (user.uid && activeTab === 'pacientes') {
+      const unsubscribe = onSnapshot(collection(db, 'clinics', user.uid, 'patients'), (snap) => {
+        setPatients(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return unsubscribe;
+    }
+  }, [user.uid, activeTab]);
 
   useEffect(() => {
     if (isAdmin && activeTab === 'admin') {
@@ -255,6 +286,14 @@ export default function Dashboard({ user }: { user: User }) {
             <Calendar className="w-5 h-5" />
             Agenda
           </button>
+
+          <button 
+            onClick={() => setActiveTab('pacientes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'pacientes' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <UserIcon className="w-5 h-5" />
+            Pacientes
+          </button>
           
           <button 
             onClick={() => setActiveTab('flujos')}
@@ -327,11 +366,14 @@ export default function Dashboard({ user }: { user: User }) {
           <div>
             <h2 className="text-xl font-semibold text-slate-900">
               {activeTab === 'agenda' && 'Agenda de la Clínica'}
+              {activeTab === 'pacientes' && 'Base de Datos de Pacientes'}
               {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
               {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
             </h2>
             <p className="text-sm text-slate-500">
+              {activeTab === 'agenda' && 'Gestión de turnos y disponibilidad diaria'}
+              {activeTab === 'pacientes' && 'Registro histórico de pacientes y su información'}
               {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
               {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
             </p>
@@ -344,36 +386,126 @@ export default function Dashboard({ user }: { user: User }) {
           {activeTab === 'agenda' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                     <Calendar className="w-5 h-5 text-sky-600"/> Calendario
-                  </h3>
-                  {/* Mock Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400 uppercase">
+                  <div className="flex items-center justify-between mb-8">
+                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <Calendar className="w-5 h-5 text-sky-600"/> 
+                        {agendaCurrentMonth.toLocaleString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
+                     </h3>
+                     <div className="flex gap-2">
+                        <button onClick={() => setAgendaCurrentMonth(new Date(agendaCurrentMonth.setMonth(agendaCurrentMonth.getMonth()-1)))} className="p-2 hover:bg-slate-100 rounded-lg">Anterior</button>
+                        <button onClick={() => setAgendaCurrentMonth(new Date(agendaCurrentMonth.setMonth(agendaCurrentMonth.getMonth()+1)))} className="p-2 hover:bg-slate-100 rounded-lg">Próximo</button>
+                     </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-7 gap-2 mb-2 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                      <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
                   </div>
-                  <div className="grid grid-cols-7 gap-2 text-center">
-                     {Array.from({length: 31}).map((_, i) => (
-                        <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${[4, 12, 18, 25].includes(i) ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
-                           <span>{i + 1}</span>
-                           {[4, 12, 18, 25].includes(i) && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
-                        </div>
-                     ))}
+                  <div className="grid grid-cols-7 gap-2">
+                     {(() => {
+                        const daysInMonth = new Date(agendaCurrentMonth.getFullYear(), agendaCurrentMonth.getMonth() + 1, 0).getDate();
+                        const firstDay = new Date(agendaCurrentMonth.getFullYear(), agendaCurrentMonth.getMonth(), 1).getDay();
+                        const items = [];
+                        for(let i=0; i<firstDay; i++) items.push(<div key={`e-${i}`} />);
+                        for(let d=1; d<=daysInMonth; d++) {
+                           const dStr = `${agendaCurrentMonth.getFullYear()}-${(agendaCurrentMonth.getMonth()+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                           const hasAppointments = appointments.some(a => a.date.startsWith(dStr));
+                           const isSelected = selectedAgendaDate === dStr;
+                           items.push(
+                              <div 
+                                key={d} 
+                                onClick={() => setSelectedAgendaDate(dStr)}
+                                className={`h-16 flex flex-col items-center justify-center rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-sky-600 border-sky-600 text-white shadow-md z-10 scale-105' : hasAppointments ? 'bg-sky-50 border-sky-100 text-sky-800' : 'bg-white border-slate-100 text-slate-600 hover:border-slate-300'}`}
+                              >
+                                 <span className="text-sm font-bold">{d}</span>
+                                 {hasAppointments && !isSelected && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
+                              </div>
+                           );
+                        }
+                        return items;
+                     })()}
                   </div>
                </div>
                
-               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
-                  <div className="space-y-4 flex-1">
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
-                        <p className="font-semibold text-slate-800">Juan Pérez</p>
-                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
-                     </div>
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
-                        <p className="font-semibold text-slate-800">María López</p>
-                        <p className="text-sm text-slate-500">Revisión de estudios</p>
-                     </div>
+               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[600px]">
+                  <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                     <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedAgendaDate}</h3>
+                     <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
+                        {appointments.filter(a => a.date.startsWith(selectedAgendaDate || '')).length} Citas
+                     </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                     {appointments.filter(a => a.date.startsWith(selectedAgendaDate || ''))
+                        .sort((a,b) => a.date.localeCompare(b.date))
+                        .map((apt, idx) => (
+                           <div key={idx} className={`p-4 border rounded-2xl relative overflow-hidden ${apt.status === 'CONFIRMED' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                 <span className="text-xs font-bold font-mono px-2 py-0.5 bg-white/50 rounded-full">{apt.date.split('-').pop()}</span>
+                                 <span className={`text-[10px] font-bold uppercase tracking-wider ${apt.status === 'CONFIRMED' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                    {apt.status === 'CONFIRMED' ? 'Confirmado' : 'Pendiente'}
+                                 </span>
+                              </div>
+                              <p className="font-bold text-slate-900">ID Paciente: {apt.patientId}</p>
+                              <p className="text-xs text-slate-500 mt-1">Creado: {new Date(apt.createdAt?.seconds * 1000).toLocaleString()}</p>
+                           </div>
+                        ))}
+                     {appointments.filter(a => a.date.startsWith(selectedAgendaDate || '')).length === 0 && (
+                        <div className="h-full flex flex-col items-center justify-center opacity-40 grayscale italic text-slate-400 text-sm p-8 text-center">
+                           No hay citas para este día.
+                        </div>
+                     )}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* TAB: PACIENTES */}
+          {activeTab === 'pacientes' && (
+            <div className="max-w-6xl mx-auto">
+               <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                     <h3 className="font-bold text-slate-900">Registro de Pacientes</h3>
+                     <span className="bg-sky-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase">{patients.length} Total</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-50/50 border-b border-slate-100">
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">DNI</th>
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Paciente</th>
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Contacto</th>
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Obra Social</th>
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Últ. Act.</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                           {patients.map(p => (
+                              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                                 <td className="p-4 font-mono text-sm font-semibold text-slate-600">{p.dni}</td>
+                                 <td className="p-4 uppercase">
+                                    <div className="font-bold text-slate-900">{p.lastName}, {p.name}</div>
+                                    <div className="text-[10px] text-slate-400">{p.email}</div>
+                                 </td>
+                                 <td className="p-4">
+                                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                                       <Phone className="w-3.5 h-3.5 text-sky-500" /> {p.phone}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 pl-5">{p.address}</div>
+                                 </td>
+                                 <td className="p-4">
+                                    <span className="px-2 py-1 bg-sky-50 text-sky-700 text-[10px] font-bold rounded">{p.obraSocial || 'S/D'}</span>
+                                 </td>
+                                 <td className="p-4 text-xs text-slate-500">
+                                    {new Date(p.updatedAt?.seconds * 1000).toLocaleDateString()}
+                                 </td>
+                              </tr>
+                           ))}
+                           {patients.length === 0 && (
+                              <tr>
+                                 <td colSpan={5} className="p-12 text-center text-slate-400 italic">No hay pacientes registrados aún.</td>
+                              </tr>
+                           )}
+                        </tbody>
+                     </table>
                   </div>
                </div>
             </div>
