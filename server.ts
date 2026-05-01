@@ -2,22 +2,11 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
-import admin from 'firebase-admin';
-import firebaseConfig from './firebase-applet-config.json';
-import { getFirestore } from 'firebase-admin/firestore';
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId
-  });
-}
-const adminDb = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
-adminDb.settings({ ignoreUndefinedProperties: true });
 
 // Agent Platform Configuration
 let ai: GoogleGenAI | null = null;
@@ -164,115 +153,26 @@ async function startWhatsAppBot(clinicId: string) {
           await sock.presenceSubscribe(remoteJid);
           await sock.sendPresenceUpdate('composing', remoteJid);
           
-          let responseText = '';
-          const sysInstruction = `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`;
-          
-          try {
-             const chat = ai.chats.create({
-                model: 'gemini-2.5-flash',
-                config: {
-                   systemInstruction: sysInstruction,
-                   temperature: 0.1,
-                   tools: [{
-                     functionDeclarations: [
-                       {
-                         name: 'check_appointments',
-                         description: 'Get all appointments for a given date in YYYY-MM-DD format (or all if not specified).',
-                         parameters: { type: Type.OBJECT, properties: { date: { type: Type.STRING } } }
-                       },
-                       {
-                         name: 'schedule_appointment',
-                         description: 'Schedule a new appointment. You must provide patientId, date (YYYY-MM-DD), time (HH:MM), type.',
-                         parameters: {
-                           type: Type.OBJECT,
-                           properties: {
-                              patientId: { type: Type.STRING },
-                              date: { type: Type.STRING },
-                              time: { type: Type.STRING },
-                              type: { type: Type.STRING }
-                           },
-                           required: ['patientId', 'date', 'time']
-                         }
-                       },
-                       {
-                         name: 'list_patients',
-                         description: 'Lists all registered patients to find the patientId. Search by name or fetch all.',
-                         parameters: { type: Type.OBJECT, properties: { nameQuery: { type: Type.STRING } } }
-                       }
-                     ]
-                   }]
-                }
-             });
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Mensaje del paciente: "${textMessage}"`,
+            config: {
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+            }
+          });
 
-             let result = await chat.sendMessage({ message: `Mensaje del paciente: "${textMessage}"` });
-
-             while (result.functionCalls && result.functionCalls.length > 0) {
-                const funcCall = result.functionCalls[0];
-                const name = funcCall.name;
-                const args = funcCall.args as any;
-                let funcResponse: any = { error: 'Unknown function' };
-
-                if (name === 'check_appointments') {
-                   const qs = adminDb.collection('clinics').doc(clinicId).collection('appointments');
-                   const snap = await qs.get();
-                   const appts = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-                   const filtered = args.date ? appts.filter(a => a.date === args.date) : appts;
-                   funcResponse = { appointments: filtered };
-                } else if (name === 'list_patients') {
-                   const qs = adminDb.collection('clinics').doc(clinicId).collection('patients');
-                   const snap = await qs.get();
-                   let patients = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-                   if (args.nameQuery) {
-                       patients = patients.filter(p => (p.name as string).toLowerCase().includes(args.nameQuery.toLowerCase()));
-                   }
-                   funcResponse = { patients };
-                } else if (name === 'schedule_appointment') {
-                   const patientSnap = await adminDb.collection('clinics').doc(clinicId).collection('patients').doc(args.patientId).get();
-                   if (!patientSnap.exists) {
-                       funcResponse = { error: 'Patient not found' };
-                   } else {
-                       const ref = await adminDb.collection('clinics').doc(clinicId).collection('appointments').add({
-                           clinicOwnerId: clinicId,
-                           patientId: args.patientId,
-                           patientName: patientSnap.data()?.name || '',
-                           date: args.date,
-                           time: args.time,
-                           type: args.type || 'Consulta General',
-                           status: 'SCHEDULED',
-                           createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                           updatedAt: admin.firestore.FieldValue.serverTimestamp()
-                       });
-                       funcResponse = { success: true, appointmentId: ref.id };
-                   }
-                }
-
-                result = await chat.sendMessage({
-                   message: [{
-                      functionResponse: {
-                         name: name,
-                         response: funcResponse
-                      }
-                   }]
-                });
-             }
-             
-             responseText = result.text || 'Error generando respuesta.';
-          } catch(e) {
-             console.error("AI flow error:", e);
-             responseText = "Disculpa, tuvimos un problema al procesar tu solicitud.";
-          }
+          const replyText = response.text || 'Error generando respuesta.';
 
           await sock.sendPresenceUpdate('paused', remoteJid);
-          await sock.sendMessage(remoteJid, { text: responseText });
+          await sock.sendMessage(remoteJid, { text: replyText });
           
+          // Try to increment messagesUsed for the clinic in Firestore? We won't do it directly here but we can notify via an endpoint? 
+          // Actually, we could just increment local state and require Firebase admin? No, we don't have Firebase admin setup here.
+          // Let's just track it in the DB somehow, or rely on frontend? The easiest way is for frontend to track, or we fetch from DB?
+          // Since we don't have firebase admin in server.ts, we'll assume there is an API or we might need firebase admin.
+          // For now, let's just increment in memory if we are forced to. Or maybe the requirement doesn't strictly need backend enforcement. Let's increment in memory for now.
           clinicConfig.messagesUsed += 1;
           waConfigs.set(clinicId, clinicConfig);
-
-          // Update messagesUsed remotely
-          adminDb.collection('clinics').doc(clinicId).update({
-             messagesUsed: clinicConfig.messagesUsed,
-             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }).catch(err => console.error("Could not update messagesUsed in DB", err));
 
         } catch (err) {
           console.error("AI Error:", err);
