@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection, deleteDoc, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Phone, HeartPulse, Edit2, Trash2, X } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ShieldCheck, CreditCard, Lock, Phone, HeartPulse, Edit2, Trash2, X } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -37,11 +37,6 @@ export default function Dashboard({ user }: { user: User }) {
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
-  // Simulator state
-  const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
-  const [simulatorInput, setSimulatorInput] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
-  
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
   const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
@@ -315,33 +310,6 @@ export default function Dashboard({ user }: { user: User }) {
   const planLimit = systemLimits[currentPlan as keyof typeof systemLimits] || 0;
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
-
-  const handleSimulate = async () => {
-    if (!simulatorInput.trim()) return;
-    const newMsg = { role: 'user' as const, text: simulatorInput };
-    setSimulatorMessages(prev => [...prev, newMsg]);
-    setSimulatorInput('');
-    setIsSimulating(true);
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-          { role: 'user', parts: [{ text: newMsg.text }] }
-        ],
-        config: {
-          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
-        }
-      });
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
-    } catch (e) {
-      console.error(e);
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
-    }
-    setIsSimulating(false);
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden">
@@ -618,107 +586,45 @@ export default function Dashboard({ user }: { user: User }) {
 
           {/* TAB: FLUJOS DE RESPUESTA */}
           {activeTab === 'flujos' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[700px]">
-                <div className="flex items-center justify-between mb-6 shrink-0">
-                  <h3 className="font-bold flex items-center gap-2 text-slate-900">
-                    <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
-                    Entrenamiento de la IA
+            <div className="max-w-3xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col min-h-[600px]">
+                <div className="flex items-center justify-between mb-8 shrink-0">
+                  <h3 className="text-xl font-bold flex items-center gap-3 text-slate-900">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                      <Bot className="w-5 h-5" />
+                    </div>
+                    Entrenamiento de la Recepcionista IA
                   </h3>
-                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Free Tier Active</span>
+                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full uppercase tracking-wider">IA Activa</span>
                 </div>
                 
-                <div className="mb-6 flex-1 flex flex-col min-h-0">
-                  <div className="border border-slate-100 rounded-xl overflow-hidden flex-1 flex flex-col">
-                    <div className="bg-slate-50 p-3 border-b border-slate-100 flex items-center justify-between shrink-0">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        Instrucciones base (System Prompt)
-                      </label>
-                      <button 
-                        disabled
-                        className="text-[10px] bg-slate-200 text-slate-500 px-2 py-0.5 rounded font-bold"
-                      >
-                        Auto-generar con IA
-                      </button>
+                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Instrucciones de Comportamiento</label>
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+                      <textarea 
+                        value={systemPrompt}
+                        onChange={(e) => setSystemPrompt(e.target.value)}
+                        className="w-full h-[400px] p-4 bg-transparent focus:outline-none text-slate-700 font-medium text-sm leading-relaxed resize-none"
+                        placeholder={`Ejemplo: Eres la recepcionista virtual de ${clinic?.name}. Responde siempre con profesionalismo. Si preguntan por turnos, diles que utilicen el link de reserva.`}
+                      />
                     </div>
-                    <textarea 
-                      value={systemPrompt}
-                      onChange={(e) => setSystemPrompt(e.target.value)}
-                      className="w-full flex-1 p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none"
-                      placeholder={`Ejemplo: Eres un asistente virtual para la ${clinic?.name}. Responde amablemente y pregunta por el nombre del paciente si es la primera vez.`}
-                    />
                   </div>
-                  <p className="text-xs text-slate-500 mt-4 shrink-0">
-                    Agrega las instrucciones específicas sobre los precios, horarios de atención, especialidad ({clinic?.specialty}) o el tono con el que el bot debe contestarle a los pacientes en WhatsApp.
-                  </p>
+                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 text-amber-800 text-sm">
+                    <div className="mt-0.5"><Settings className="w-4 h-4" /></div>
+                    <p>Estas instrucciones definen cómo el bot responderá a los mensajes de WhatsApp de tus pacientes.</p>
+                  </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100 shrink-0">
+                <div className="flex justify-end pt-8 mt-6 border-t border-slate-100 shrink-0">
                   <button 
                     onClick={saveSettings}
                     disabled={savingSettings}
-                    className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50"
+                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold transition-all hover:bg-slate-800 disabled:opacity-50 shadow-xl shadow-slate-200"
                   >
-                    {savingSettings ? 'Guardando...' : 'Guardar Entrenamiento'}
+                    {savingSettings ? 'Guardando...' : 'Guardar y Aplicar Entrenamiento'}
                   </button>
                 </div>
-              </div>
-
-              {/* SIMULADOR WHATSAPP */}
-              <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
-                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
-                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
-                       <Bot className="w-6 h-6" />
-                    </div>
-                    <div>
-                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
-                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
-                    </div>
-                 </div>
-                 
-                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
-                    <div className="text-center my-2">
-                       <span className="text-[11px] bg-black/5 text-slate-600 px-3 py-1 rounded-lg uppercase tracking-wider font-semibold">Hoy</span>
-                    </div>
-
-                    <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                       <p className="text-[14px] text-slate-800 leading-relaxed">
-                         ¡Hola! Esto es un simulador de WhatsApp. Las respuestas generadas aquí usarán el contenido que hayas escrito en las instrucciones de la izquierda. 👋
-                       </p>
-                    </div>
-
-                    {simulatorMessages.map((m, i) => (
-                       <div key={i} className={`max-w-[85%] rounded-lg p-3 shadow-sm ${m.role === 'user' ? 'bg-[#d9fdd3] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
-                           <p className="text-[14px] text-slate-800 leading-relaxed whitespace-pre-wrap">{m.text}</p>
-                       </div>
-                    ))}
-
-                    {isSimulating && (
-                       <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                          <p className="text-[14px] text-slate-500 font-medium animate-pulse">Escribiendo...</p>
-                       </div>
-                    )}
-                 </div>
-
-                 <div className="bg-[#f0f2f5] p-3 flex gap-2 items-end shrink-0 pointer-events-auto z-10">
-                    <div className="flex-1 bg-white rounded-xl break-words min-h-[44px] flex items-center px-4 overflow-hidden">
-                       <input 
-                         type="text" 
-                         value={simulatorInput}
-                         onChange={e => setSimulatorInput(e.target.value)}
-                         onKeyDown={e => e.key === 'Enter' && handleSimulate()}
-                         placeholder="Escribe un mensaje..."
-                         className="w-full bg-transparent border-none focus:outline-none text-[15px] text-slate-700 py-2.5"
-                       />
-                    </div>
-                    <button 
-                       onClick={handleSimulate}
-                       disabled={isSimulating || !simulatorInput.trim()}
-                       className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white disabled:opacity-50 shrink-0 transition-opacity hover:opacity-90 shadow-sm"
-                    >
-                       <ArrowRight className="w-5 h-5" />
-                    </button>
-                 </div>
               </div>
             </div>
           )}
