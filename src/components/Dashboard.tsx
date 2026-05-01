@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection, deleteDoc, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Phone, HeartPulse } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Phone, HeartPulse, Edit2, Trash2, X } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -53,6 +53,48 @@ export default function Dashboard({ user }: { user: User }) {
   const [allClinics, setAllClinics] = useState<any[]>([]);
   const [selectedAgendaDate, setSelectedAgendaDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [agendaCurrentMonth, setAgendaCurrentMonth] = useState(new Date());
+
+  // Patient Management State
+  const [isAddingPatient, setIsAddingPatient] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<any | null>(null);
+  const [isDeletingPatient, setIsDeletingPatient] = useState<string | null>(null);
+  const [patientForm, setPatientForm] = useState<any>({
+    dni: '',
+    name: '',
+    lastName: '',
+    phone: '',
+    email: '',
+    address: '',
+    obraSocial: ''
+  });
+
+  const resetPatientForm = () => {
+    setPatientForm({
+      dni: '',
+      name: '',
+      lastName: '',
+      phone: '',
+      email: '',
+      address: '',
+      obraSocial: ''
+    });
+  };
+
+  const handleCreatePatient = async () => {
+    if (!user.uid) return;
+    try {
+      await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
+        ...patientForm,
+        clinicOwnerId: user.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      setIsAddingPatient(false);
+      resetPatientForm();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `clinics/${user.uid}/patients`);
+    }
+  };
 
   useEffect(() => {
     if (user.uid && activeTab === 'agenda') {
@@ -112,6 +154,42 @@ export default function Dashboard({ user }: { user: User }) {
        }).catch(console.error);
     }
   }, [isAdmin]);
+
+  const handleEditPatient = (p: any) => {
+    setEditingPatient(p);
+    setPatientForm({
+      dni: p.dni || '',
+      name: p.name || '',
+      lastName: p.lastName || '',
+      phone: p.phone || '',
+      email: p.email || '',
+      address: p.address || '',
+      obraSocial: p.obraSocial || ''
+    });
+  };
+
+  const handleUpdatePatient = async () => {
+    if (!editingPatient || !user.uid) return;
+    try {
+      await updateDoc(doc(db, 'clinics', user.uid, 'patients', editingPatient.id), {
+        ...patientForm,
+        updatedAt: serverTimestamp()
+      });
+      setEditingPatient(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `clinics/${user.uid}/patients/${editingPatient.id}`);
+    }
+  };
+
+  const handleDeletePatient = async (id: string) => {
+    if (!user.uid) return;
+    try {
+      await deleteDoc(doc(db, 'clinics', user.uid, 'patients', id));
+      setIsDeletingPatient(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `clinics/${user.uid}/patients/${id}`);
+    }
+  };
 
   const saveAdminConfig = async () => {
      setSavingAdmin(true);
@@ -464,7 +542,15 @@ export default function Dashboard({ user }: { user: User }) {
                <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
                   <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                      <h3 className="font-bold text-slate-900">Registro de Pacientes</h3>
-                     <span className="bg-sky-600 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase">{patients.length} Total</span>
+                     <div className="flex items-center gap-4">
+                        <span className="bg-sky-100 text-sky-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase">{patients.length} Total</span>
+                        <button 
+                          onClick={() => { resetPatientForm(); setIsAddingPatient(true); }}
+                          className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-lg shadow-sky-100 flex items-center gap-2"
+                        >
+                          <UserIcon className="w-3.5 h-3.5" /> Nuevo Paciente
+                        </button>
+                     </div>
                   </div>
                   <div className="overflow-x-auto">
                      <table className="w-full text-left border-collapse">
@@ -475,6 +561,7 @@ export default function Dashboard({ user }: { user: User }) {
                               <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Contacto</th>
                               <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Obra Social</th>
                               <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Últ. Act.</th>
+                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -496,6 +583,24 @@ export default function Dashboard({ user }: { user: User }) {
                                  </td>
                                  <td className="p-4 text-xs text-slate-500">
                                     {new Date(p.updatedAt?.seconds * 1000).toLocaleDateString()}
+                                 </td>
+                                 <td className="p-4 text-right">
+                                    <div className="flex items-center justify-end gap-2">
+                                       <button 
+                                          onClick={() => handleEditPatient(p)}
+                                          className="p-2 hover:bg-sky-100 text-sky-600 rounded-lg transition-colors"
+                                          title="Editar Paciente"
+                                       >
+                                          <Edit2 className="w-4 h-4" />
+                                       </button>
+                                       <button 
+                                          onClick={() => setIsDeletingPatient(p.id)}
+                                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                                          title="Eliminar Paciente"
+                                       >
+                                          <Trash2 className="w-4 h-4" />
+                                       </button>
+                                    </div>
                                  </td>
                               </tr>
                            ))}
@@ -919,6 +1024,117 @@ export default function Dashboard({ user }: { user: User }) {
             </div>
           )}
         </div>
+
+        {/* MODALS */}
+        {(editingPatient || isAddingPatient) && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+             <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in-scale">
+                <div className="bg-slate-900 p-6 text-white flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
+                         <UserIcon className="text-sky-400 w-5 h-5" />
+                      </div>
+                      <h3 className="text-lg font-bold">{isAddingPatient ? 'Nuevo Paciente' : 'Editar Paciente'}</h3>
+                   </div>
+                   <button onClick={() => { setEditingPatient(null); setIsAddingPatient(false); }} className="p-2 hover:bg-white/10 rounded-lg"><X /></button>
+                </div>
+                <div className="p-8 space-y-4">
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">DNI</label>
+                         <input 
+                           type="text"
+                           value={patientForm.dni}
+                           onChange={e => setPatientForm({...patientForm, dni: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Obra Social</label>
+                         <input 
+                           type="text"
+                           value={patientForm.obraSocial}
+                           onChange={e => setPatientForm({...patientForm, obraSocial: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1 text-left">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
+                         <input 
+                           type="text"
+                           value={patientForm.name}
+                           onChange={e => setPatientForm({...patientForm, name: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1 text-left">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Apellido</label>
+                         <input 
+                           type="text"
+                           value={patientForm.lastName}
+                           onChange={e => setPatientForm({...patientForm, lastName: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1 text-left">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
+                         <input 
+                           type="tel"
+                           value={patientForm.phone}
+                           onChange={e => setPatientForm({...patientForm, phone: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1 text-left">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
+                         <input 
+                           type="email"
+                           value={patientForm.email}
+                           onChange={e => setPatientForm({...patientForm, email: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                      <div className="space-y-1 text-left col-span-2">
+                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Dirección</label>
+                         <input 
+                           type="text"
+                           value={patientForm.address}
+                           onChange={e => setPatientForm({...patientForm, address: e.target.value})}
+                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
+                         />
+                      </div>
+                   </div>
+                   <div className="flex gap-4 pt-6">
+                      <button onClick={() => { setEditingPatient(null); setIsAddingPatient(false); }} className="flex-1 py-4 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all">Cancelar</button>
+                      <button 
+                        onClick={isAddingPatient ? handleCreatePatient : handleUpdatePatient} 
+                        className="flex-1 bg-sky-600 hover:bg-sky-700 text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-sky-100"
+                      >
+                        {isAddingPatient ? 'Crear Paciente' : 'Guardar Cambios'}
+                      </button>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
+
+        {isDeletingPatient && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+             <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-fade-in-scale">
+                <div className="p-8 text-center">
+                   <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trash2 className="w-8 h-8" />
+                   </div>
+                   <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar Paciente?</h3>
+                   <p className="text-slate-500 text-sm mb-6">Esta acción no se puede deshacer. Se borrará permanentemente la información del paciente.</p>
+                   <div className="flex gap-3">
+                      <button onClick={() => setIsDeletingPatient(null)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all">No, cancelar</button>
+                      <button onClick={() => handleDeletePatient(isDeletingPatient)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-red-100">Sí, eliminar</button>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
       </main>
     </div>
   );
