@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection, deleteDoc, addDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ShieldCheck, CreditCard, Lock, Phone, HeartPulse, Edit2, Trash2, X } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -21,93 +21,25 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
-interface AppConfig {
-  botActive: boolean;
-  systemPrompt: string;
-  name: string;
-  plan: string;
-  messagesUsed: number;
-}
-
 export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Simulator state
+  const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
+  const [simulatorInput, setSimulatorInput] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
   const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
-  const [waConfigs, setWaConfigs] = useState<Map<string, AppConfig>>(new Map());
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [patients, setPatients] = useState<any[]>([]);
   const [allClinics, setAllClinics] = useState<any[]>([]);
-  const [selectedAgendaDate, setSelectedAgendaDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
-  const [agendaCurrentMonth, setAgendaCurrentMonth] = useState(new Date());
-
-  // Patient Management State
-  const [isAddingPatient, setIsAddingPatient] = useState(false);
-  const [editingPatient, setEditingPatient] = useState<any | null>(null);
-  const [isDeletingPatient, setIsDeletingPatient] = useState<string | null>(null);
-  const [patientForm, setPatientForm] = useState<any>({
-    dni: '',
-    name: '',
-    lastName: '',
-    phone: '',
-    email: '',
-    address: '',
-    obraSocial: ''
-  });
-
-  const resetPatientForm = () => {
-    setPatientForm({
-      dni: '',
-      name: '',
-      lastName: '',
-      phone: '',
-      email: '',
-      address: '',
-      obraSocial: ''
-    });
-  };
-
-  const handleCreatePatient = async () => {
-    if (!user.uid) return;
-    try {
-      await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
-        ...patientForm,
-        clinicOwnerId: user.uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      setIsAddingPatient(false);
-      resetPatientForm();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `clinics/${user.uid}/patients`);
-    }
-  };
-
-  useEffect(() => {
-    if (user.uid && activeTab === 'agenda') {
-      const unsubscribe = onSnapshot(collection(db, 'clinics', user.uid, 'appointments'), (snap) => {
-        setAppointments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      });
-      return unsubscribe;
-    }
-  }, [user.uid, activeTab]);
-
-  useEffect(() => {
-    if (user.uid && activeTab === 'pacientes') {
-      const unsubscribe = onSnapshot(collection(db, 'clinics', user.uid, 'patients'), (snap) => {
-        setPatients(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      });
-      return unsubscribe;
-    }
-  }, [user.uid, activeTab]);
 
   useEffect(() => {
     if (isAdmin && activeTab === 'admin') {
@@ -149,42 +81,6 @@ export default function Dashboard({ user }: { user: User }) {
        }).catch(console.error);
     }
   }, [isAdmin]);
-
-  const handleEditPatient = (p: any) => {
-    setEditingPatient(p);
-    setPatientForm({
-      dni: p.dni || '',
-      name: p.name || '',
-      lastName: p.lastName || '',
-      phone: p.phone || '',
-      email: p.email || '',
-      address: p.address || '',
-      obraSocial: p.obraSocial || ''
-    });
-  };
-
-  const handleUpdatePatient = async () => {
-    if (!editingPatient || !user.uid) return;
-    try {
-      await updateDoc(doc(db, 'clinics', user.uid, 'patients', editingPatient.id), {
-        ...patientForm,
-        updatedAt: serverTimestamp()
-      });
-      setEditingPatient(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `clinics/${user.uid}/patients/${editingPatient.id}`);
-    }
-  };
-
-  const handleDeletePatient = async (id: string) => {
-    if (!user.uid) return;
-    try {
-      await deleteDoc(doc(db, 'clinics', user.uid, 'patients', id));
-      setIsDeletingPatient(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `clinics/${user.uid}/patients/${id}`);
-    }
-  };
 
   const saveAdminConfig = async () => {
      setSavingAdmin(true);
@@ -311,6 +207,33 @@ export default function Dashboard({ user }: { user: User }) {
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
 
+  const handleSimulate = async () => {
+    if (!simulatorInput.trim()) return;
+    const newMsg = { role: 'user' as const, text: simulatorInput };
+    setSimulatorMessages(prev => [...prev, newMsg]);
+    setSimulatorInput('');
+    setIsSimulating(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+          { role: 'user', parts: [{ text: newMsg.text }] }
+        ],
+        config: {
+          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
+        }
+      });
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
+    } catch (e) {
+      console.error(e);
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
+    }
+    setIsSimulating(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden">
       {/* Sidebar */}
@@ -331,14 +254,6 @@ export default function Dashboard({ user }: { user: User }) {
           >
             <Calendar className="w-5 h-5" />
             Agenda
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('pacientes')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'pacientes' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            <UserIcon className="w-5 h-5" />
-            Pacientes
           </button>
           
           <button 
@@ -412,14 +327,11 @@ export default function Dashboard({ user }: { user: User }) {
           <div>
             <h2 className="text-xl font-semibold text-slate-900">
               {activeTab === 'agenda' && 'Agenda de la Clínica'}
-              {activeTab === 'pacientes' && 'Base de Datos de Pacientes'}
               {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
               {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
             </h2>
             <p className="text-sm text-slate-500">
-              {activeTab === 'agenda' && 'Gestión de turnos y disponibilidad diaria'}
-              {activeTab === 'pacientes' && 'Registro histórico de pacientes y su información'}
               {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
               {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
             </p>
@@ -432,153 +344,36 @@ export default function Dashboard({ user }: { user: User }) {
           {activeTab === 'agenda' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-8">
-                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                        <Calendar className="w-5 h-5 text-sky-600"/> 
-                        {agendaCurrentMonth.toLocaleString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
-                     </h3>
-                     <div className="flex gap-2">
-                        <button onClick={() => setAgendaCurrentMonth(new Date(agendaCurrentMonth.setMonth(agendaCurrentMonth.getMonth()-1)))} className="p-2 hover:bg-slate-100 rounded-lg">Anterior</button>
-                        <button onClick={() => setAgendaCurrentMonth(new Date(agendaCurrentMonth.setMonth(agendaCurrentMonth.getMonth()+1)))} className="p-2 hover:bg-slate-100 rounded-lg">Próximo</button>
-                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-7 gap-2 mb-2 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                     <Calendar className="w-5 h-5 text-sky-600"/> Calendario
+                  </h3>
+                  {/* Mock Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400 uppercase">
                      <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
                   </div>
-                  <div className="grid grid-cols-7 gap-2">
-                     {(() => {
-                        const daysInMonth = new Date(agendaCurrentMonth.getFullYear(), agendaCurrentMonth.getMonth() + 1, 0).getDate();
-                        const firstDay = new Date(agendaCurrentMonth.getFullYear(), agendaCurrentMonth.getMonth(), 1).getDay();
-                        const items = [];
-                        for(let i=0; i<firstDay; i++) items.push(<div key={`e-${i}`} />);
-                        for(let d=1; d<=daysInMonth; d++) {
-                           const dStr = `${agendaCurrentMonth.getFullYear()}-${(agendaCurrentMonth.getMonth()+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
-                           const hasAppointments = appointments.some(a => a.date.startsWith(dStr));
-                           const isSelected = selectedAgendaDate === dStr;
-                           items.push(
-                              <div 
-                                key={d} 
-                                onClick={() => setSelectedAgendaDate(dStr)}
-                                className={`h-16 flex flex-col items-center justify-center rounded-xl border cursor-pointer transition-all ${isSelected ? 'bg-sky-600 border-sky-600 text-white shadow-md z-10 scale-105' : hasAppointments ? 'bg-sky-50 border-sky-100 text-sky-800' : 'bg-white border-slate-100 text-slate-600 hover:border-slate-300'}`}
-                              >
-                                 <span className="text-sm font-bold">{d}</span>
-                                 {hasAppointments && !isSelected && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
-                              </div>
-                           );
-                        }
-                        return items;
-                     })()}
+                  <div className="grid grid-cols-7 gap-2 text-center">
+                     {Array.from({length: 31}).map((_, i) => (
+                        <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${[4, 12, 18, 25].includes(i) ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
+                           <span>{i + 1}</span>
+                           {[4, 12, 18, 25].includes(i) && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
+                        </div>
+                     ))}
                   </div>
                </div>
                
-               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[600px]">
-                  <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                     <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedAgendaDate}</h3>
-                     <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">
-                        {appointments.filter(a => a.date.startsWith(selectedAgendaDate || '')).length} Citas
-                     </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                     {appointments.filter(a => a.date.startsWith(selectedAgendaDate || ''))
-                        .sort((a,b) => a.date.localeCompare(b.date))
-                        .map((apt, idx) => (
-                           <div key={idx} className={`p-4 border rounded-2xl relative overflow-hidden ${apt.status === 'CONFIRMED' ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-                              <div className="flex items-center justify-between mb-2">
-                                 <span className="text-xs font-bold font-mono px-2 py-0.5 bg-white/50 rounded-full">{apt.date.split('-').pop()}</span>
-                                 <span className={`text-[10px] font-bold uppercase tracking-wider ${apt.status === 'CONFIRMED' ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                    {apt.status === 'CONFIRMED' ? 'Confirmado' : 'Pendiente'}
-                                 </span>
-                              </div>
-                              <p className="font-bold text-slate-900">ID Paciente: {apt.patientId}</p>
-                              <p className="text-xs text-slate-500 mt-1">Creado: {new Date(apt.createdAt?.seconds * 1000).toLocaleString()}</p>
-                           </div>
-                        ))}
-                     {appointments.filter(a => a.date.startsWith(selectedAgendaDate || '')).length === 0 && (
-                        <div className="h-full flex flex-col items-center justify-center opacity-40 grayscale italic text-slate-400 text-sm p-8 text-center">
-                           No hay citas para este día.
-                        </div>
-                     )}
-                  </div>
-               </div>
-            </div>
-          )}
-
-          {/* TAB: PACIENTES */}
-          {activeTab === 'pacientes' && (
-            <div className="max-w-6xl mx-auto">
-               <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
-                  <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                     <h3 className="font-bold text-slate-900">Registro de Pacientes</h3>
-                     <div className="flex items-center gap-4">
-                        <span className="bg-sky-100 text-sky-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase">{patients.length} Total</span>
-                        <button 
-                          onClick={() => { resetPatientForm(); setIsAddingPatient(true); }}
-                          className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-lg shadow-sky-100 flex items-center gap-2"
-                        >
-                          <UserIcon className="w-3.5 h-3.5" /> Nuevo Paciente
-                        </button>
+               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
+                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
+                  <div className="space-y-4 flex-1">
+                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
+                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
+                        <p className="font-semibold text-slate-800">Juan Pérez</p>
+                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
                      </div>
-                  </div>
-                  <div className="overflow-x-auto">
-                     <table className="w-full text-left border-collapse">
-                        <thead>
-                           <tr className="bg-slate-50/50 border-b border-slate-100">
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">DNI</th>
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Paciente</th>
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Contacto</th>
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Obra Social</th>
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Últ. Act.</th>
-                              <th className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-right">Acciones</th>
-                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                           {patients.map(p => (
-                              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                                 <td className="p-4 font-mono text-sm font-semibold text-slate-600">{p.dni}</td>
-                                 <td className="p-4 uppercase">
-                                    <div className="font-bold text-slate-900">{p.lastName}, {p.name}</div>
-                                    <div className="text-[10px] text-slate-400">{p.email}</div>
-                                 </td>
-                                 <td className="p-4">
-                                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                                       <Phone className="w-3.5 h-3.5 text-sky-500" /> {p.phone}
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 pl-5">{p.address}</div>
-                                 </td>
-                                 <td className="p-4">
-                                    <span className="px-2 py-1 bg-sky-50 text-sky-700 text-[10px] font-bold rounded">{p.obraSocial || 'S/D'}</span>
-                                 </td>
-                                 <td className="p-4 text-xs text-slate-500">
-                                    {new Date(p.updatedAt?.seconds * 1000).toLocaleDateString()}
-                                 </td>
-                                 <td className="p-4 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                       <button 
-                                          onClick={() => handleEditPatient(p)}
-                                          className="p-2 hover:bg-sky-100 text-sky-600 rounded-lg transition-colors"
-                                          title="Editar Paciente"
-                                       >
-                                          <Edit2 className="w-4 h-4" />
-                                       </button>
-                                       <button 
-                                          onClick={() => setIsDeletingPatient(p.id)}
-                                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                                          title="Eliminar Paciente"
-                                       >
-                                          <Trash2 className="w-4 h-4" />
-                                       </button>
-                                    </div>
-                                 </td>
-                              </tr>
-                           ))}
-                           {patients.length === 0 && (
-                              <tr>
-                                 <td colSpan={5} className="p-12 text-center text-slate-400 italic">No hay pacientes registrados aún.</td>
-                              </tr>
-                           )}
-                        </tbody>
-                     </table>
+                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
+                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
+                        <p className="font-semibold text-slate-800">María López</p>
+                        <p className="text-sm text-slate-500">Revisión de estudios</p>
+                     </div>
                   </div>
                </div>
             </div>
@@ -586,45 +381,107 @@ export default function Dashboard({ user }: { user: User }) {
 
           {/* TAB: FLUJOS DE RESPUESTA */}
           {activeTab === 'flujos' && (
-            <div className="max-w-3xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-3xl p-8 shadow-sm flex flex-col min-h-[600px]">
-                <div className="flex items-center justify-between mb-8 shrink-0">
-                  <h3 className="text-xl font-bold flex items-center gap-3 text-slate-900">
-                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-                      <Bot className="w-5 h-5" />
-                    </div>
-                    Entrenamiento de la Recepcionista IA
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[700px]">
+                <div className="flex items-center justify-between mb-6 shrink-0">
+                  <h3 className="font-bold flex items-center gap-2 text-slate-900">
+                    <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
+                    Entrenamiento de la IA
                   </h3>
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full uppercase tracking-wider">IA Activa</span>
+                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Free Tier Active</span>
                 </div>
                 
-                <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Instrucciones de Comportamiento</label>
-                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
-                      <textarea 
-                        value={systemPrompt}
-                        onChange={(e) => setSystemPrompt(e.target.value)}
-                        className="w-full h-[400px] p-4 bg-transparent focus:outline-none text-slate-700 font-medium text-sm leading-relaxed resize-none"
-                        placeholder={`Ejemplo: Eres la recepcionista virtual de ${clinic?.name}. Responde siempre con profesionalismo. Si preguntan por turnos, diles que utilicen el link de reserva.`}
-                      />
+                <div className="mb-6 flex-1 flex flex-col min-h-0">
+                  <div className="border border-slate-100 rounded-xl overflow-hidden flex-1 flex flex-col">
+                    <div className="bg-slate-50 p-3 border-b border-slate-100 flex items-center justify-between shrink-0">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Instrucciones base (System Prompt)
+                      </label>
+                      <button 
+                        disabled
+                        className="text-[10px] bg-slate-200 text-slate-500 px-2 py-0.5 rounded font-bold"
+                      >
+                        Auto-generar con IA
+                      </button>
                     </div>
+                    <textarea 
+                      value={systemPrompt}
+                      onChange={(e) => setSystemPrompt(e.target.value)}
+                      className="w-full flex-1 p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none"
+                      placeholder={`Ejemplo: Eres un asistente virtual para la ${clinic?.name}. Responde amablemente y pregunta por el nombre del paciente si es la primera vez.`}
+                    />
                   </div>
-                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3 text-amber-800 text-sm">
-                    <div className="mt-0.5"><Settings className="w-4 h-4" /></div>
-                    <p>Estas instrucciones definen cómo el bot responderá a los mensajes de WhatsApp de tus pacientes.</p>
-                  </div>
+                  <p className="text-xs text-slate-500 mt-4 shrink-0">
+                    Agrega las instrucciones específicas sobre los precios, horarios de atención, especialidad ({clinic?.specialty}) o el tono con el que el bot debe contestarle a los pacientes en WhatsApp.
+                  </p>
                 </div>
 
-                <div className="flex justify-end pt-8 mt-6 border-t border-slate-100 shrink-0">
+                <div className="flex justify-end pt-4 border-t border-slate-100 shrink-0">
                   <button 
                     onClick={saveSettings}
                     disabled={savingSettings}
-                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold transition-all hover:bg-slate-800 disabled:opacity-50 shadow-xl shadow-slate-200"
+                    className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {savingSettings ? 'Guardando...' : 'Guardar y Aplicar Entrenamiento'}
+                    {savingSettings ? 'Guardando...' : 'Guardar Entrenamiento'}
                   </button>
                 </div>
+              </div>
+
+              {/* SIMULADOR WHATSAPP */}
+              <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
+                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
+                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
+                       <Bot className="w-6 h-6" />
+                    </div>
+                    <div>
+                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
+                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+                    <div className="text-center my-2">
+                       <span className="text-[11px] bg-black/5 text-slate-600 px-3 py-1 rounded-lg uppercase tracking-wider font-semibold">Hoy</span>
+                    </div>
+
+                    <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
+                       <p className="text-[14px] text-slate-800 leading-relaxed">
+                         ¡Hola! Esto es un simulador de WhatsApp. Las respuestas generadas aquí usarán el contenido que hayas escrito en las instrucciones de la izquierda. 👋
+                       </p>
+                    </div>
+
+                    {simulatorMessages.map((m, i) => (
+                       <div key={i} className={`max-w-[85%] rounded-lg p-3 shadow-sm ${m.role === 'user' ? 'bg-[#d9fdd3] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
+                           <p className="text-[14px] text-slate-800 leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                       </div>
+                    ))}
+
+                    {isSimulating && (
+                       <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
+                          <p className="text-[14px] text-slate-500 font-medium animate-pulse">Escribiendo...</p>
+                       </div>
+                    )}
+                 </div>
+
+                 <div className="bg-[#f0f2f5] p-3 flex gap-2 items-end shrink-0 pointer-events-auto z-10">
+                    <div className="flex-1 bg-white rounded-xl break-words min-h-[44px] flex items-center px-4 overflow-hidden">
+                       <input 
+                         type="text" 
+                         value={simulatorInput}
+                         onChange={e => setSimulatorInput(e.target.value)}
+                         onKeyDown={e => e.key === 'Enter' && handleSimulate()}
+                         placeholder="Escribe un mensaje..."
+                         className="w-full bg-transparent border-none focus:outline-none text-[15px] text-slate-700 py-2.5"
+                       />
+                    </div>
+                    <button 
+                       onClick={handleSimulate}
+                       disabled={isSimulating || !simulatorInput.trim()}
+                       className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white disabled:opacity-50 shrink-0 transition-opacity hover:opacity-90 shadow-sm"
+                    >
+                       <ArrowRight className="w-5 h-5" />
+                    </button>
+                 </div>
               </div>
             </div>
           )}
@@ -930,117 +787,6 @@ export default function Dashboard({ user }: { user: User }) {
             </div>
           )}
         </div>
-
-        {/* MODALS */}
-        {(editingPatient || isAddingPatient) && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-             <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-fade-in-scale">
-                <div className="bg-slate-900 p-6 text-white flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-                         <UserIcon className="text-sky-400 w-5 h-5" />
-                      </div>
-                      <h3 className="text-lg font-bold">{isAddingPatient ? 'Nuevo Paciente' : 'Editar Paciente'}</h3>
-                   </div>
-                   <button onClick={() => { setEditingPatient(null); setIsAddingPatient(false); }} className="p-2 hover:bg-white/10 rounded-lg"><X /></button>
-                </div>
-                <div className="p-8 space-y-4">
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">DNI</label>
-                         <input 
-                           type="text"
-                           value={patientForm.dni}
-                           onChange={e => setPatientForm({...patientForm, dni: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Obra Social</label>
-                         <input 
-                           type="text"
-                           value={patientForm.obraSocial}
-                           onChange={e => setPatientForm({...patientForm, obraSocial: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1 text-left">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Nombre</label>
-                         <input 
-                           type="text"
-                           value={patientForm.name}
-                           onChange={e => setPatientForm({...patientForm, name: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1 text-left">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Apellido</label>
-                         <input 
-                           type="text"
-                           value={patientForm.lastName}
-                           onChange={e => setPatientForm({...patientForm, lastName: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1 text-left">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">WhatsApp</label>
-                         <input 
-                           type="tel"
-                           value={patientForm.phone}
-                           onChange={e => setPatientForm({...patientForm, phone: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1 text-left">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                         <input 
-                           type="email"
-                           value={patientForm.email}
-                           onChange={e => setPatientForm({...patientForm, email: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                      <div className="space-y-1 text-left col-span-2">
-                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Dirección</label>
-                         <input 
-                           type="text"
-                           value={patientForm.address}
-                           onChange={e => setPatientForm({...patientForm, address: e.target.value})}
-                           className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-500 outline-none"
-                         />
-                      </div>
-                   </div>
-                   <div className="flex gap-4 pt-6">
-                      <button onClick={() => { setEditingPatient(null); setIsAddingPatient(false); }} className="flex-1 py-4 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all">Cancelar</button>
-                      <button 
-                        onClick={isAddingPatient ? handleCreatePatient : handleUpdatePatient} 
-                        className="flex-1 bg-sky-600 hover:bg-sky-700 text-white py-4 rounded-2xl font-bold transition-all shadow-lg shadow-sky-100"
-                      >
-                        {isAddingPatient ? 'Crear Paciente' : 'Guardar Cambios'}
-                      </button>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
-
-        {isDeletingPatient && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-             <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-fade-in-scale">
-                <div className="p-8 text-center">
-                   <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Trash2 className="w-8 h-8" />
-                   </div>
-                   <h3 className="text-xl font-bold text-slate-900 mb-2">¿Eliminar Paciente?</h3>
-                   <p className="text-slate-500 text-sm mb-6">Esta acción no se puede deshacer. Se borrará permanentemente la información del paciente.</p>
-                   <div className="flex gap-3">
-                      <button onClick={() => setIsDeletingPatient(null)} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 transition-all">No, cancelar</button>
-                      <button onClick={() => handleDeletePatient(isDeletingPatient)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-red-100">Sí, eliminar</button>
-                   </div>
-                </div>
-             </div>
-          </div>
-        )}
       </main>
     </div>
   );
