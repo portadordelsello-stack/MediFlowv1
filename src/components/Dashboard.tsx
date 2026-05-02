@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -23,16 +24,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'perfil' | 'admin'>('agenda');
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
-
-  // Simulator state
-  const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
-  const [simulatorInput, setSimulatorInput] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
@@ -116,65 +111,6 @@ export default function Dashboard({ user }: { user: User }) {
     return unsubscribe;
   }, [user.uid]);
 
-  // Sync latest config to the WhatsApp server periodically or on change
-  useEffect(() => {
-    if (clinic) {
-      fetch('/api/whatsapp/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clinicId: user.uid,
-          botActive: clinic.botActive,
-          systemPrompt: clinic.systemPrompt,
-          name: clinic.name,
-          plan: clinic.plan,
-          messagesUsed: clinic.messagesUsed
-        })
-      }).catch(console.error);
-    }
-  }, [clinic, user.uid]);
-
-  // Poll for WhatsApp connection status
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(`/api/whatsapp/status/${user.uid}`);
-        if (res.ok) {
-          const data = await res.json();
-          setWaStatus(data.status);
-          setQrCode(data.qr);
-          if (data.messagesUsed != null && clinic && data.messagesUsed > (clinic.messagesUsed || 0)) {
-             let updates: any = { messagesUsed: data.messagesUsed, updatedAt: serverTimestamp() };
-             // If limit reached, automatically deactivate bot
-             const currentPlan = clinic.plan || 'GRATIS';
-             const planLimit = systemLimits[currentPlan as keyof typeof systemLimits] || 0;
-             if (data.messagesUsed >= planLimit && clinic.botActive) {
-                updates.botActive = false;
-             }
-             await updateDoc(doc(db, 'clinics', user.uid), updates).catch(console.error);
-          }
-        }
-      } catch (err) {}
-    };
-
-    const interval = setInterval(fetchStatus, 3000);
-    fetchStatus();
-    return () => clearInterval(interval);
-  }, [user.uid, clinic, systemLimits]);
-
-  const startWhatsApp = async () => {
-    try {
-      setWaStatus('INITIALIZING');
-      await fetch('/api/whatsapp/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId: user.uid })
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const toggleBotActive = async () => {
     if (!clinic) return;
     if (!clinic.botActive && isLimitReached) return;
@@ -207,74 +143,61 @@ export default function Dashboard({ user }: { user: User }) {
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
 
-  const handleSimulate = async () => {
-    if (!simulatorInput.trim()) return;
-    const newMsg = { role: 'user' as const, text: simulatorInput };
-    setSimulatorMessages(prev => [...prev, newMsg]);
-    setSimulatorInput('');
-    setIsSimulating(true);
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-          { role: 'user', parts: [{ text: newMsg.text }] }
-        ],
-        config: {
-          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
-        }
-      });
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
-    } catch (e) {
-      console.error(e);
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
-    }
-    setIsSimulating(false);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden">
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden relative">
+      {/* Mobile Sidebar Overlay */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div className="p-6 border-b border-slate-100">
+      <aside className={`
+        fixed inset-y-0 left-0 w-72 bg-white border-r border-slate-200 flex flex-col z-50 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+            <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-sky-100">
               M
             </div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900">MediFlex</h1>
           </div>
+          <button 
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-2 text-slate-400 hover:text-slate-600 lg:hidden"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
           <button 
-            onClick={() => setActiveTab('agenda')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'agenda' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            onClick={() => { setActiveTab('agenda'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'agenda' ? 'bg-sky-50 text-sky-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <Calendar className="w-5 h-5" />
             Agenda
           </button>
           
           <button 
-            onClick={() => setActiveTab('flujos')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'flujos' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            onClick={() => { setActiveTab('flujos'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'flujos' ? 'bg-sky-50 text-sky-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <Bot className="w-5 h-5" />
-            Flujos Respuesta
+            Configuración IA
           </button>
           
           <button 
-            onClick={() => setActiveTab('configuracion')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'configuracion' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            <Settings className="w-5 h-5" />
-            Configuración
-          </button>
-
-          <button 
-            onClick={() => setActiveTab('perfil')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'perfil' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            onClick={() => { setActiveTab('perfil'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'perfil' ? 'bg-sky-50 text-sky-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
           >
             <UserIcon className="w-5 h-5" />
             Perfil
@@ -282,8 +205,8 @@ export default function Dashboard({ user }: { user: User }) {
 
           {isAdmin && (
             <button 
-              onClick={() => setActiveTab('admin')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'admin' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
+              onClick={() => { setActiveTab('admin'); setIsSidebarOpen(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all ${activeTab === 'admin' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
             >
               <Lock className="w-5 h-5" />
               Admin Sistema
@@ -292,7 +215,7 @@ export default function Dashboard({ user }: { user: User }) {
         </nav>
 
         <div className="p-4 border-t border-slate-100">
-          <div className="p-4 bg-emerald-50 rounded-xl mb-4">
+          <div className="p-4 bg-emerald-50 rounded-xl mb-4 border border-emerald-100">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Status</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -301,7 +224,7 @@ export default function Dashboard({ user }: { user: User }) {
           </div>
 
            <div className="flex items-center gap-3 px-2 mb-4">
-             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold uppercase overflow-hidden shrink-0">
+             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold uppercase overflow-hidden shrink-0 border border-slate-200">
                {user.email?.charAt(0)}
              </div>
              <div className="overflow-hidden">
@@ -312,7 +235,7 @@ export default function Dashboard({ user }: { user: User }) {
            
            <button 
              onClick={() => signOut(auth)}
-             className="w-full flex items-center gap-3 px-4 py-2 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-colors"
+             className="w-full flex items-center gap-3 px-4 py-2+ rounded-lg font-medium text-red-600 hover:bg-red-50 transition-colors"
            >
              <LogOut className="w-5 h-5" />
              Cerrar Sesión
@@ -323,22 +246,24 @@ export default function Dashboard({ user }: { user: User }) {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Header Bar */}
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">
+        <header className="h-16 lg:h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shrink-0">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 text-slate-500 hover:bg-slate-50 rounded-lg lg:hidden"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h2 className="text-lg lg:text-xl font-semibold text-slate-900 truncate">
               {activeTab === 'agenda' && 'Agenda de la Clínica'}
-              {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
-              {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
+              {activeTab === 'flujos' && 'Configuración de Recepcionista IA'}
               {activeTab === 'perfil' && 'Perfil y Facturación'}
+              {activeTab === 'admin' && 'Panel Administrativo'}
             </h2>
-            <p className="text-sm text-slate-500">
-              {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
-              {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
-            </p>
           </div>
         </header>
 
-        <div className="p-8 flex-1 overflow-y-auto">
+        <div className="p-4 lg:p-8 flex-1 overflow-y-auto">
           
           {/* TAB: AGENDA */}
           {activeTab === 'agenda' && (
@@ -379,16 +304,16 @@ export default function Dashboard({ user }: { user: User }) {
             </div>
           )}
 
-          {/* TAB: FLUJOS DE RESPUESTA */}
+          {/* TAB: FLUJOS DE RESPUESTA / ENTRENAMIENTO */}
           {activeTab === 'flujos' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[700px]">
+            <div className="max-w-3xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
                 <div className="flex items-center justify-between mb-6 shrink-0">
                   <h3 className="font-bold flex items-center gap-2 text-slate-900">
                     <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
                     Entrenamiento de la IA
                   </h3>
-                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Free Tier Active</span>
+                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Estado del Motor: {clinic?.botActive ? 'Activo' : 'Pausado'}</span>
                 </div>
                 
                 <div className="mb-6 flex-1 flex flex-col min-h-0">
@@ -397,183 +322,39 @@ export default function Dashboard({ user }: { user: User }) {
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         Instrucciones base (System Prompt)
                       </label>
-                      <button 
-                        disabled
-                        className="text-[10px] bg-slate-200 text-slate-500 px-2 py-0.5 rounded font-bold"
-                      >
-                        Auto-generar con IA
-                      </button>
                     </div>
                     <textarea 
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
-                      className="w-full flex-1 p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none"
+                      className="w-full min-h-[300px] p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none"
                       placeholder={`Ejemplo: Eres un asistente virtual para la ${clinic?.name}. Responde amablemente y pregunta por el nombre del paciente si es la primera vez.`}
                     />
                   </div>
                   <p className="text-xs text-slate-500 mt-4 shrink-0">
-                    Agrega las instrucciones específicas sobre los precios, horarios de atención, especialidad ({clinic?.specialty}) o el tono con el que el bot debe contestarle a los pacientes en WhatsApp.
+                    Agrega las instrucciones específicas sobre los precios, horarios de atención, especialidad ({clinic?.specialty}) o el tono con el que el bot debe contestarle a los pacientes.
                   </p>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-slate-100 shrink-0">
-                  <button 
-                    onClick={saveSettings}
-                    disabled={savingSettings}
-                    className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50"
-                  >
-                    {savingSettings ? 'Guardando...' : 'Guardar Entrenamiento'}
-                  </button>
-                </div>
-              </div>
-
-              {/* SIMULADOR WHATSAPP */}
-              <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
-                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
-                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
-                       <Bot className="w-6 h-6" />
-                    </div>
-                    <div>
-                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
-                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
-                    </div>
-                 </div>
-                 
-                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
-                    <div className="text-center my-2">
-                       <span className="text-[11px] bg-black/5 text-slate-600 px-3 py-1 rounded-lg uppercase tracking-wider font-semibold">Hoy</span>
-                    </div>
-
-                    <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                       <p className="text-[14px] text-slate-800 leading-relaxed">
-                         ¡Hola! Esto es un simulador de WhatsApp. Las respuestas generadas aquí usarán el contenido que hayas escrito en las instrucciones de la izquierda. 👋
-                       </p>
-                    </div>
-
-                    {simulatorMessages.map((m, i) => (
-                       <div key={i} className={`max-w-[85%] rounded-lg p-3 shadow-sm ${m.role === 'user' ? 'bg-[#d9fdd3] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
-                           <p className="text-[14px] text-slate-800 leading-relaxed whitespace-pre-wrap">{m.text}</p>
-                       </div>
-                    ))}
-
-                    {isSimulating && (
-                       <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                          <p className="text-[14px] text-slate-500 font-medium animate-pulse">Escribiendo...</p>
-                       </div>
-                    )}
-                 </div>
-
-                 <div className="bg-[#f0f2f5] p-3 flex gap-2 items-end shrink-0 pointer-events-auto z-10">
-                    <div className="flex-1 bg-white rounded-xl break-words min-h-[44px] flex items-center px-4 overflow-hidden">
-                       <input 
-                         type="text" 
-                         value={simulatorInput}
-                         onChange={e => setSimulatorInput(e.target.value)}
-                         onKeyDown={e => e.key === 'Enter' && handleSimulate()}
-                         placeholder="Escribe un mensaje..."
-                         className="w-full bg-transparent border-none focus:outline-none text-[15px] text-slate-700 py-2.5"
-                       />
-                    </div>
-                    <button 
-                       onClick={handleSimulate}
-                       disabled={isSimulating || !simulatorInput.trim()}
-                       className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white disabled:opacity-50 shrink-0 transition-opacity hover:opacity-90 shadow-sm"
-                    >
-                       <ArrowRight className="w-5 h-5" />
-                    </button>
-                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB: CONFIGURACION / WHATSAPP */}
-          {activeTab === 'configuracion' && (
-            <div className="max-w-2xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900">Conexión de WhatsApp</h3>
-                    <p className="text-sm text-slate-500 mt-1">Conecta tu teléfono médico</p>
+                <div className="flex items-center justify-between pt-6 border-t border-slate-100 shrink-0">
+                  <div className="flex flex-col">
+                    <h4 className="font-semibold text-slate-900 text-sm">Activar Automatización</h4>
+                    <p className="text-xs text-slate-500">Habilitar el motor de respuestas inteligentes.</p>
                   </div>
-                  <div className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wide uppercase ${
-                    waStatus === 'CONNECTED' ? 'bg-emerald-100 text-emerald-700' : 
-                    waStatus === 'QR_READY' ? 'bg-amber-100 text-amber-700' :
-                    waStatus === 'INITIALIZING' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-700'
-                  }`}>
-                    {waStatus === 'QR_READY' ? 'Esperando Escaneo' : waStatus}
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-center justify-center p-8 bg-slate-50 border border-slate-200 rounded-xl mb-8 min-h-[300px]">
-                  {waStatus === 'DISCONNECTED' && (
-                    <div className="text-center">
-                      <QrCode className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-                      <p className="text-slate-500 mb-6 max-w-sm text-sm">
-                        Escanea el código QR desde WhatsApp &gt; Dispositivos vinculados para conectar la IA a tu línea.
-                      </p>
-                      <button 
-                        onClick={startWhatsApp}
-                        className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800"
-                      >
-                        Generar QR de WhatsApp
-                      </button>
-                    </div>
-                  )}
-
-                  {waStatus === 'INITIALIZING' && (
-                    <div className="text-center">
-                      <div className="w-12 h-12 border-4 border-sky-100 border-t-sky-600 rounded-full animate-spin mx-auto mb-4"></div>
-                      <p className="text-slate-600 font-medium text-sm">Generando código seguro...</p>
-                    </div>
-                  )}
-
-                  {waStatus === 'QR_READY' && qrCode && (
-                    <div className="text-center">
-                      <div className="relative p-4 border-4 border-slate-50 rounded-xl bg-white shadow-inner mb-4 inline-block">
-                        <img src={qrCode} alt="WhatsApp QR Code" className="w-56 h-56" />
-                      </div>
-                      <p className="text-slate-600 text-sm font-medium">1. Abre WhatsApp en tu dispositivo celular.</p>
-                      <p className="text-slate-500 text-xs mt-1">2. Ve a Configuración &gt; Dispositivos Vinculados.</p>
-                      <p className="text-slate-500 text-xs mt-1">3. Escanea este código para iniciar sesión.</p>
-                    </div>
-                  )}
-
-                  {waStatus === 'CONNECTED' && (
-                    <div className="text-center">
-                       <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <MessageCircle className="w-8 h-8" />
-                       </div>
-                       <h4 className="text-lg font-bold text-slate-900 mb-2">Línea Conectada</h4>
-                       <p className="text-slate-500 text-sm max-w-sm mx-auto">
-                          La IA está enlazada a tu cuenta de WhatsApp y puede recibir mensajes.
-                       </p>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold text-slate-900 text-sm">Activar Motor de Respuestas (Bot AI)</h4>
-                      <p className="text-xs text-slate-500">Permite que Gemini comience a responder auto-mágicamente.</p>
-                      {isLimitReached && (
-                        <p className="text-xs text-red-500 font-medium mt-1">Límite de mensajes alcanzado ({messagesUsed}/{planLimit}).</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {isLimitReached && (
-                         <button onClick={handleUpgrade} className="px-3 py-1.5 bg-sky-100 hover:bg-sky-200 text-sky-700 text-xs font-bold rounded-lg transition-colors">
-                            Actualizar Suscripción
-                         </button>
-                      )}
-                      <button
+                  <div className="flex items-center gap-4">
+                     <button
                         onClick={toggleBotActive}
-                        disabled={waStatus !== 'CONNECTED' || isLimitReached}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${(clinic?.botActive && !isLimitReached) ? 'bg-sky-500' : 'bg-slate-300'} ${(waStatus !== 'CONNECTED' || isLimitReached) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={isLimitReached}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${(clinic?.botActive && !isLimitReached) ? 'bg-sky-500' : 'bg-slate-300'} ${isLimitReached ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${(clinic?.botActive && !isLimitReached) ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
-                    </div>
+                    <button 
+                      onClick={saveSettings}
+                      disabled={savingSettings}
+                      className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {savingSettings ? 'Guardando...' : 'Guardar Entrenamiento'}
+                    </button>
                   </div>
                 </div>
               </div>

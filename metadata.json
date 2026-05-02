@@ -1,6 +1,6 @@
 {
-  "name": "MediFlex: Auto WhatsApp",
-  "description": "WhatsApp automation SaaS for medical clinics to manage appointments and auto-reply using AI.",
+  "name": "MediFlex: Smart Health Assistant",
+  "description": "Smart automation SaaS for medical clinics to manage appointments and auto-reply using Gemini.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

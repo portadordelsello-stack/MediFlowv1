@@ -13,10 +13,9 @@
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" },
         "systemPrompt": { "type": "string", "maxLength": 5000 },
-        "botActive": { "type": "boolean" },
-        "whatsappSessionStatus": { "type": "string", "enum": ["DISCONNECTED", "CONNECTED", "QR_READY"] }
+        "botActive": { "type": "boolean" }
       },
-      "required": ["ownerId", "name", "specialty", "plan", "trialEndsAt", "createdAt", "updatedAt", "botActive", "whatsappSessionStatus"]
+      "required": ["ownerId", "name", "specialty", "plan", "trialEndsAt", "createdAt", "updatedAt", "botActive"]
     },
     "Patient": {
       "title": "Patient",
