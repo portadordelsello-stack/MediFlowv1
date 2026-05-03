@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --target=node18 --outfile=dist/server.js --format=esm --external:esbuild --external:vite --external:@whiskeysockets/baileys",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --target=node18 --outfile=dist/server.cjs --format=cjs --external:esbuild --external:vite --external:@whiskeysockets/baileys",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "start": "node dist/server.js"
+    "start": "node dist/server.cjs"
   },
   "dependencies": {
     "@google-cloud/vertexai": "^1.12.0",
