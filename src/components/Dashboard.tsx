@@ -2,11 +2,8 @@ import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { 
-  LogOut, QrCode, MessageCircle, Settings, Calendar, 
-  User as UserIcon, Bot, ShieldCheck, CreditCard, Lock, Menu, X 
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -28,10 +25,42 @@ export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
-  const [activeTab, setActiveTab] = useState<'agenda' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'flujos' | 'configuracion' | 'perfil' | 'admin'>('agenda');
+  const [patients, setPatients] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Sync Patients
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'clinics', user.uid, 'patients'),
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+        setPatients(list);
+      }
+    );
+    return unsubscribe;
+  }, [user.uid]);
+
+  // Sync Appointments
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'clinics', user.uid, 'appointments'),
+      (snapshot) => {
+        const list: any[] = [];
+        snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+        setAppointments(list);
+      }
+    );
+    return unsubscribe;
+  }, [user.uid]);
+
+  // Simulator state
+  const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
+  const [simulatorInput, setSimulatorInput] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
   
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
@@ -206,162 +235,270 @@ export default function Dashboard({ user }: { user: User }) {
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-            M
-          </div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">MediFlex</h1>
-        </div>
-        <button onClick={() => setIsMobileMenuOpen(false)} className="lg:hidden p-2 text-slate-500">
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      <nav className="flex-1 p-4 space-y-1">
-        {[
-          { id: 'agenda', icon: Calendar, label: 'Agenda' },
-          { id: 'flujos', icon: Bot, label: 'Flujos Respuesta' },
-          { id: 'configuracion', icon: Settings, label: 'Configuración' },
-          { id: 'perfil', icon: UserIcon, label: 'Perfil' },
-          ...(isAdmin ? [{ id: 'admin', icon: Lock, label: 'Admin Sistema' }] : [])
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => {
-              setActiveTab(item.id as any);
-              setIsMobileMenuOpen(false);
-            }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === item.id ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
-          >
-            <item.icon className="w-5 h-5" />
-            {item.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="p-4 border-t border-slate-100">
-        <div className="p-4 bg-emerald-50 rounded-xl mb-4">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Status</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          </div>
-          <p className="text-xs text-emerald-800 font-medium">Plan {currentPlan}</p>
-        </div>
-
-        <div className="flex items-center gap-3 px-2 mb-4 overflow-hidden">
-          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold uppercase overflow-hidden shrink-0">
-            {user.email?.charAt(0)}
-          </div>
-          <div className="overflow-hidden">
-            <p className="text-sm font-medium truncate text-slate-900">{clinic?.name || user.displayName}</p>
-            <p className="text-xs text-slate-500 truncate">{user.email}</p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => signOut(auth)}
-          className="w-full flex items-center gap-3 px-4 py-2 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-colors"
-        >
-          <LogOut className="w-5 h-5" />
-          Cerrar Sesión
-        </button>
-      </div>
-    </div>
-  );
+  const handleSimulate = async () => {
+    if (!simulatorInput.trim()) return;
+    const newMsg = { role: 'user' as const, text: simulatorInput };
+    setSimulatorMessages(prev => [...prev, newMsg]);
+    setSimulatorInput('');
+    setIsSimulating(true);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+          { role: 'user', parts: [{ text: newMsg.text }] }
+        ],
+        config: {
+          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
+        }
+      });
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
+    } catch (e) {
+      console.error(e);
+      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
+    }
+    setIsSimulating(false);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden relative">
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] lg:hidden"
-            />
-            <motion.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 left-0 bottom-0 w-[280px] bg-white z-[70] lg:hidden shadow-2xl"
-            >
-              <SidebarContent />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
+        <div className="p-6 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
+              M
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">MediFlex</h1>
+          </div>
+        </div>
 
-      <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col shrink-0">
-        <SidebarContent />
+        <nav className="flex-1 p-4 space-y-1">
+          <button 
+            onClick={() => setActiveTab('agenda')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'agenda' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <Calendar className="w-5 h-5" />
+            Agenda
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('pacientes')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'pacientes' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <UserIcon className="w-5 h-5" />
+            Pacientes
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('flujos')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'flujos' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <Bot className="w-5 h-5" />
+            Flujos Respuesta
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('configuracion')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'configuracion' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <Settings className="w-5 h-5" />
+            Configuración
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('perfil')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'perfil' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+          >
+            <UserIcon className="w-5 h-5" />
+            Perfil
+          </button>
+
+          {isAdmin && (
+            <button 
+              onClick={() => setActiveTab('admin')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'admin' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            >
+              <Lock className="w-5 h-5" />
+              Admin Sistema
+            </button>
+          )}
+        </nav>
+
+        <div className="p-4 border-t border-slate-100">
+          <div className="p-4 bg-emerald-50 rounded-xl mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Status</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <p className="text-xs text-emerald-800 font-medium">Plan {currentPlan}</p>
+          </div>
+
+           <div className="flex items-center gap-3 px-2 mb-4">
+             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold uppercase overflow-hidden shrink-0">
+               {user.email?.charAt(0)}
+             </div>
+             <div className="overflow-hidden">
+               <p className="text-sm font-medium truncate text-slate-900">{clinic?.name || user.displayName}</p>
+               <p className="text-xs text-slate-500 truncate">{user.email}</p>
+             </div>
+           </div>
+           
+           <button 
+             onClick={() => signOut(auth)}
+             className="w-full flex items-center gap-3 px-4 py-2 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-colors"
+           >
+             <LogOut className="w-5 h-5" />
+             Cerrar Sesión
+           </button>
+        </div>
       </aside>
 
+      {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <div>
-              <h2 className="text-lg lg:text-xl font-semibold text-slate-900 truncate">
-                {activeTab === 'agenda' && 'Agenda de la Clínica'}
-                {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
-                {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
-                {activeTab === 'perfil' && 'Perfil y Facturación'}
-                {activeTab === 'admin' && 'Panel Administrativo'}
-              </h2>
-              <p className="text-xs lg:text-sm text-slate-500 hidden sm:block">
-                {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
-                {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
-              </p>
-            </div>
+        {/* Header Bar */}
+        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-900">
+              {activeTab === 'agenda' && 'Agenda de la Clínica'}
+              {activeTab === 'pacientes' && 'Base de Datos de Pacientes'}
+              {activeTab === 'flujos' && 'Flujos de Respuesta AI'}
+              {activeTab === 'configuracion' && 'Conexión WhatsApp Web'}
+              {activeTab === 'perfil' && 'Perfil y Facturación'}
+            </h2>
+            <p className="text-sm text-slate-500">
+              {activeTab === 'configuracion' && 'Gestión de la instancia oficial de WhatsApp Web'}
+              {activeTab === 'flujos' && 'Entrena a tu recepcionista virtual con Gemini'}
+              {activeTab === 'pacientes' && 'Gestión de pacientes registrados y su historial.'}
+            </p>
           </div>
         </header>
 
-        <div className="p-4 lg:p-8 flex-1 overflow-y-auto">
+        <div className="p-8 flex-1 overflow-y-auto">
           
           {/* TAB: AGENDA */}
           {activeTab === 'agenda' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                     <Calendar className="w-5 h-5 text-sky-600"/> Calendario
-                  </h3>
-                  {/* Mock Calendar Grid */}
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                       <Calendar className="w-5 h-5 text-sky-600"/> Calendario de Turnos
+                    </h3>
+                    <div className="flex gap-2">
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+                        <span className="w-2 h-2 rounded-full bg-sky-500"></span> Ocupado
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Calendar Grid */}
                   <div className="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-bold text-slate-400 uppercase">
                      <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
                   </div>
                   <div className="grid grid-cols-7 gap-2 text-center">
-                     {Array.from({length: 31}).map((_, i) => (
-                        <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${[4, 12, 18, 25].includes(i) ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
-                           <span>{i + 1}</span>
-                           {[4, 12, 18, 25].includes(i) && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
-                        </div>
-                     ))}
+                     {Array.from({length: 31}).map((_, i) => {
+                        const dateStr = `2026-05-${String(i + 1).padStart(2, '0')}`;
+                        const dayAppointments = appointments.filter(a => a.date === dateStr);
+                        const isToday = i + 1 === 3; // Hardcoded for demo/today
+                        return (
+                          <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${dayAppointments.length > 0 ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : isToday ? 'border-sky-500 ring-1 ring-sky-500 bg-white' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
+                             <span className="text-sm">{i + 1}</span>
+                             {dayAppointments.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
+                          </div>
+                        );
+                     })}
                   </div>
                </div>
                
                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Citas del día</h3>
-                  <div className="space-y-4 flex-1">
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">09:00 AM</p>
-                        <p className="font-semibold text-slate-800">Juan Pérez</p>
-                        <p className="text-sm text-slate-500">Consulta Primera Vez</p>
+                  <h3 className="text-lg font-bold text-slate-900 mb-6">Próximos Turnos</h3>
+                  <div className="space-y-4 flex-1 overflow-y-auto max-h-[500px] pr-2">
+                     {appointments.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10).map((app) => {
+                        const patient = patients.find(p => p.id === app.patientId);
+                        return (
+                          <div key={app.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
+                             <div className="flex justify-between items-start mb-1">
+                                <p className="text-xs font-bold text-slate-400">{app.date} - {app.time}</p>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${app.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  {app.status}
+                                </span>
+                             </div>
+                             <p className="font-semibold text-slate-800">{patient?.name || 'Paciente Desconocido'}</p>
+                             <p className="text-sm text-slate-500">DNI: {app.patientDni}</p>
+                          </div>
+                        );
+                     })}
+                     {appointments.length === 0 && (
+                        <div className="text-center py-10">
+                           <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                           <p className="text-sm text-slate-400 font-medium text-balance">No hay turnos agendados aún.</p>
+                        </div>
+                     )}
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* TAB: PACIENTES */}
+          {activeTab === 'pacientes' && (
+            <div className="max-w-6xl mx-auto">
+               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                     <div>
+                        <h3 className="font-bold text-slate-900">Listado de Pacientes</h3>
+                        <p className="text-sm text-slate-500">Consulta y gestiona la información de tus pacientes.</p>
                      </div>
-                     <div className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-emerald-500">
-                        <p className="text-xs font-bold text-slate-400 mb-1">11:30 AM</p>
-                        <p className="font-semibold text-slate-800">María López</p>
-                        <p className="text-sm text-slate-500">Revisión de estudios</p>
+                     <div className="flex gap-2">
+                        <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
+                           Exportar Datos
+                        </button>
                      </div>
+                  </div>
+                  <div className="overflow-x-auto">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                              <th className="px-6 py-4 border-b border-slate-100">Nombre</th>
+                              <th className="px-6 py-4 border-b border-slate-100">DNI</th>
+                              <th className="px-6 py-4 border-b border-slate-100">WhatsApp</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Email</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Acciones</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                           {patients.map(p => (
+                              <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                                 <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                       <div className="w-8 h-8 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-xs">
+                                          {p.name?.charAt(0) || 'P'}
+                                       </div>
+                                       <span className="font-medium text-slate-900">{p.name || 'Sin Nombre'}</span>
+                                    </div>
+                                 </td>
+                                 <td className="px-6 py-4 text-sm text-slate-600">{p.dni}</td>
+                                 <td className="px-6 py-4 text-sm text-slate-600">{p.phone}</td>
+                                 <td className="px-6 py-4 text-sm text-slate-600">{p.email || '-'}</td>
+                                 <td className="px-6 py-4">
+                                    <button className="text-xs font-bold text-sky-600 hover:text-sky-800 uppercase tracking-wider">Ver Ficha</button>
+                                 </td>
+                              </tr>
+                           ))}
+                           {patients.length === 0 && (
+                              <tr>
+                                 <td colSpan={5} className="px-6 py-12 text-center">
+                                    <div className="max-w-xs mx-auto">
+                                       <UserIcon className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                                       <p className="text-slate-900 font-bold mb-1">No hay pacientes registrados</p>
+                                       <p className="text-slate-500 text-sm">Los pacientes aparecerán aquí cuando se registren a través de WhatsApp o el portal de reservas.</p>
+                                    </div>
+                                 </td>
+                              </tr>
+                           )}
+                        </tbody>
+                     </table>
                   </div>
                </div>
             </div>
@@ -369,51 +506,108 @@ export default function Dashboard({ user }: { user: User }) {
 
           {/* TAB: FLUJOS DE RESPUESTA */}
           {activeTab === 'flujos' && (
-            <div className="max-w-4xl mx-auto h-full flex flex-col">
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col flex-1 min-h-[500px]"
-              >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[700px]">
                 <div className="flex items-center justify-between mb-6 shrink-0">
-                  <h3 className="font-bold flex items-center gap-2 text-slate-900 text-lg">
+                  <h3 className="font-bold flex items-center gap-2 text-slate-900">
                     <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
-                    Entrenamiento de la Recepcionista IA
+                    Entrenamiento de la IA
                   </h3>
-                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Motor Gemini 2.5</span>
+                  <span className="px-2 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded uppercase">Free Tier Active</span>
                 </div>
                 
                 <div className="mb-6 flex-1 flex flex-col min-h-0">
-                  <div className="border border-slate-100 rounded-xl overflow-hidden flex-1 flex flex-col shadow-inner">
+                  <div className="border border-slate-100 rounded-xl overflow-hidden flex-1 flex flex-col">
                     <div className="bg-slate-50 p-3 border-b border-slate-100 flex items-center justify-between shrink-0">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                         Instrucciones base (System Prompt)
                       </label>
+                      <button 
+                        disabled
+                        className="text-[10px] bg-slate-200 text-slate-500 px-2 py-0.5 rounded font-bold"
+                      >
+                        Auto-generar con IA
+                      </button>
                     </div>
                     <textarea 
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
-                      className="w-full flex-1 p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none bg-white"
+                      className="w-full flex-1 p-4 text-slate-700 focus:outline-none font-mono text-sm leading-relaxed resize-none"
                       placeholder={`Ejemplo: Eres un asistente virtual para la ${clinic?.name}. Responde amablemente y pregunta por el nombre del paciente si es la primera vez.`}
                     />
                   </div>
-                  <div className="mt-4 p-4 bg-sky-50 rounded-xl border border-sky-100">
-                    <p className="text-xs text-sky-800 leading-relaxed font-medium">
-                      💡 <strong>Consejo:</strong> Agrega detalles sobre tus precios, horarios de atención, especialidad ({clinic?.specialty}) y el tono (formal/amigable). Cuanta más información des, mejor responderá el bot en WhatsApp.
-                    </p>
-                  </div>
+                  <p className="text-xs text-slate-500 mt-4 shrink-0">
+                    Agrega las instrucciones específicas sobre los precios, horarios de atención, especialidad ({clinic?.specialty}) o el tono con el que el bot debe contestarle a los pacientes en WhatsApp.
+                  </p>
                 </div>
 
                 <div className="flex justify-end pt-4 border-t border-slate-100 shrink-0">
                   <button 
                     onClick={saveSettings}
                     disabled={savingSettings}
-                    className="w-full sm:w-auto px-8 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold transition-all hover:bg-slate-800 shadow-lg hover:shadow-xl disabled:opacity-50 active:scale-95"
+                    className="px-6 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {savingSettings ? 'Guardando cambios...' : 'Guardar Entrenamiento'}
+                    {savingSettings ? 'Guardando...' : 'Guardar Entrenamiento'}
                   </button>
                 </div>
-              </motion.div>
+              </div>
+
+              {/* SIMULADOR WHATSAPP */}
+              <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
+                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
+                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
+                       <Bot className="w-6 h-6" />
+                    </div>
+                    <div>
+                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
+                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
+                    <div className="text-center my-2">
+                       <span className="text-[11px] bg-black/5 text-slate-600 px-3 py-1 rounded-lg uppercase tracking-wider font-semibold">Hoy</span>
+                    </div>
+
+                    <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
+                       <p className="text-[14px] text-slate-800 leading-relaxed">
+                         ¡Hola! Esto es un simulador de WhatsApp. Las respuestas generadas aquí usarán el contenido que hayas escrito en las instrucciones de la izquierda. 👋
+                       </p>
+                    </div>
+
+                    {simulatorMessages.map((m, i) => (
+                       <div key={i} className={`max-w-[85%] rounded-lg p-3 shadow-sm ${m.role === 'user' ? 'bg-[#d9fdd3] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
+                           <p className="text-[14px] text-slate-800 leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                       </div>
+                    ))}
+
+                    {isSimulating && (
+                       <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
+                          <p className="text-[14px] text-slate-500 font-medium animate-pulse">Escribiendo...</p>
+                       </div>
+                    )}
+                 </div>
+
+                 <div className="bg-[#f0f2f5] p-3 flex gap-2 items-end shrink-0 pointer-events-auto z-10">
+                    <div className="flex-1 bg-white rounded-xl break-words min-h-[44px] flex items-center px-4 overflow-hidden">
+                       <input 
+                         type="text" 
+                         value={simulatorInput}
+                         onChange={e => setSimulatorInput(e.target.value)}
+                         onKeyDown={e => e.key === 'Enter' && handleSimulate()}
+                         placeholder="Escribe un mensaje..."
+                         className="w-full bg-transparent border-none focus:outline-none text-[15px] text-slate-700 py-2.5"
+                       />
+                    </div>
+                    <button 
+                       onClick={handleSimulate}
+                       disabled={isSimulating || !simulatorInput.trim()}
+                       className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white disabled:opacity-50 shrink-0 transition-opacity hover:opacity-90 shadow-sm"
+                    >
+                       <ArrowRight className="w-5 h-5" />
+                    </button>
+                 </div>
+              </div>
             </div>
           )}
 

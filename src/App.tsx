@@ -5,6 +5,7 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { Activity, ShieldCheck, HeartPulse, QrCode, Phone, MessageSquare, X, Calendar } from 'lucide-react';
 import Dashboard from './components/Dashboard';
+import BookingPortal from './components/BookingPortal';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -309,6 +310,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Dashboard user={user} />} />
+        <Route path="/reservar/:clinicId" element={<BookingPortal />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </BrowserRouter>

@@ -7,6 +7,31 @@ import path from 'path';
 import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
+import * as admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
+
+// Initialize Firebase Admin (Lazy)
+const firebaseAppConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
+
+let adminApp: admin.app.App | null = null;
+let firestoreDb: admin.firestore.Firestore | null = null;
+
+function getFirebaseAdmin() {
+  if (!adminApp) {
+    adminApp = admin.initializeApp({
+      projectId: firebaseAppConfig.projectId,
+    });
+  }
+  return adminApp;
+}
+
+function getDb(): admin.firestore.Firestore {
+  if (!firestoreDb) {
+    const app = getFirebaseAdmin();
+    firestoreDb = getFirestore(app, firebaseAppConfig.firestoreDatabaseId);
+  }
+  return firestoreDb;
+}
 
 // Agent Platform Configuration
 let ai: GoogleGenAI | null = null;
@@ -71,8 +96,9 @@ const waQRCodes = new Map<string, string>();
 const waStatus = new Map<string, string>();
 const waConfigs = new Map<string, AppConfig>();
 
-async function startWhatsAppBot(clinicId: string) {
+async function startWhatsAppBot(clinicId: string, host: string) {
   const authFolder = path.join(process.cwd(), 'wa_clients', clinicId);
+  const bookingUrl = `https://${host}/reservar/${clinicId}`;
   if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
   }
@@ -110,7 +136,7 @@ async function startWhatsAppBot(clinicId: string) {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       waStatus.set(clinicId, 'DISCONNECTED');
       if (shouldReconnect) {
-        setTimeout(() => startWhatsAppBot(clinicId), 5000);
+        setTimeout(() => startWhatsAppBot(clinicId, host), 5000);
       } else {
         waQRCodes.delete(clinicId);
         if (fs.existsSync(authFolder)) {
@@ -148,16 +174,73 @@ async function startWhatsAppBot(clinicId: string) {
 
       if (ai) {
         try {
+          // Check if message is a booking confirmation link text
+          // Example: "Hola! Soy Juan Pérez (DNI: 1234). He reservado un turno para el 2026-05-24 a las 17:30h."
+          const bookingMatch = textMessage.match(/He reservado un turno para el (\d{4}-\d{2}-\d{2}) a las (\d{2}:\d{2})h/);
+          const dniMatch = textMessage.match(/\(DNI: (.*?)\)/);
+
+          if (bookingMatch && dniMatch) {
+            const date = bookingMatch[1];
+            const time = bookingMatch[2];
+            const dni = dniMatch[1];
+
+            console.log(`Potential booking confirmation detected for DNI ${dni} on ${date} at ${time}`);
+
+            // Find the patient first
+            const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
+            const patientSnap = await patientsRef.where('dni', '==', dni).limit(1).get();
+
+            if (!patientSnap.empty) {
+              const patientId = patientSnap.docs[0].id;
+              const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
+              
+              // Find or create the appointment
+              const appSnap = await appointmentsRef
+                .where('patientId', '==', patientId)
+                .where('date', '==', date)
+                .where('time', '==', time)
+                .limit(1)
+                .get();
+
+              if (!appSnap.empty) {
+                await appSnap.docs[0].ref.update({ status: 'CONFIRMED', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+              } else {
+                // Create if it doesn't exist (though it should have been created by the portal or we can create it now)
+                await appointmentsRef.add({
+                  clinicOwnerId: clinicId,
+                  patientId,
+                  patientDni: dni,
+                  date,
+                  time,
+                  status: 'CONFIRMED',
+                  createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                  updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                });
+              }
+              
+              await sock.sendMessage(remoteJid, { text: `¡Perfecto! Su turno para el ${date} a las ${time}h ha sido CONFIRMADO. ¡Lo esperamos!` });
+              
+              const clinicRef = getDb().collection('clinics').doc(clinicId);
+              await clinicRef.update({ 
+                messagesUsed: admin.firestore.FieldValue.increment(1),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+              });
+              
+              continue; // Skip AI generation for this message as it's handled
+            }
+          }
+
           const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
 
           await sock.presenceSubscribe(remoteJid);
           await sock.sendPresenceUpdate('composing', remoteJid);
           
+          const bookingUrl = `https://${host}/reservar/${clinicId}`;
           const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
             config: {
-              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}`
             }
           });
 
@@ -166,11 +249,13 @@ async function startWhatsAppBot(clinicId: string) {
           await sock.sendPresenceUpdate('paused', remoteJid);
           await sock.sendMessage(remoteJid, { text: replyText });
           
-          // Try to increment messagesUsed for the clinic in Firestore? We won't do it directly here but we can notify via an endpoint? 
-          // Actually, we could just increment local state and require Firebase admin? No, we don't have Firebase admin setup here.
-          // Let's just track it in the DB somehow, or rely on frontend? The easiest way is for frontend to track, or we fetch from DB?
-          // Since we don't have firebase admin in server.ts, we'll assume there is an API or we might need firebase admin.
-          // For now, let's just increment in memory if we are forced to. Or maybe the requirement doesn't strictly need backend enforcement. Let's increment in memory for now.
+          // Increment messagesUsed in DB
+          const clinicRef = getDb().collection('clinics').doc(clinicId);
+          await clinicRef.update({ 
+            messagesUsed: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+          });
+
           clinicConfig.messagesUsed += 1;
           waConfigs.set(clinicId, clinicConfig);
 
@@ -210,10 +295,11 @@ app.get('/api/system-limits', (req, res) => {
 app.post('/api/whatsapp/start', async (req, res) => {
   const { clinicId } = req.body;
   if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+  const host = req.get('host') || 'localhost:3000';
   
   if (!waClients.has(clinicId)) {
     waStatus.set(clinicId, 'INITIALIZING');
-    await startWhatsAppBot(clinicId);
+    await startWhatsAppBot(clinicId, host);
   }
   
   res.json({ status: waStatus.get(clinicId) });

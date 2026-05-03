@@ -29,21 +29,25 @@ service cloud.firestore {
     }
 
     function isValidPatient(data) {
-      return data.keys().hasAll(['clinicOwnerId', 'phone', 'createdAt', 'updatedAt']) &&
-             data.keys().size() >= 4 && data.keys().size() <= 5 &&
-             data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && data.clinicOwnerId == request.auth.uid &&
+      return data.keys().hasAll(['clinicOwnerId', 'phone', 'dni', 'createdAt', 'updatedAt']) &&
+             data.keys().size() >= 5 && data.keys().size() <= 6 &&
+             data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && (data.clinicOwnerId == request.auth.uid || !isSignedIn()) &&
              data.phone is string && data.phone.size() <= 20 &&
+             data.dni is string && data.dni.size() <= 20 &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
-             (!('name' in data) || (data.name is string && data.name.size() <= 100));
+             (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 100));
     }
 
     function isValidAppointment(data) {
-      return data.keys().hasAll(['clinicOwnerId', 'patientId', 'date', 'status', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 6 &&
-             data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && data.clinicOwnerId == request.auth.uid &&
+      return data.keys().hasAll(['clinicOwnerId', 'patientId', 'patientDni', 'date', 'time', 'status', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 8 &&
+             data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && (data.clinicOwnerId == request.auth.uid || !isSignedIn()) &&
              data.patientId is string && data.patientId.size() <= 128 &&
+             data.patientDni is string && data.patientDni.size() <= 20 &&
              data.date is string && data.date.size() <= 50 &&
+             data.time is string && data.time.size() <= 20 &&
              data.status in ['SCHEDULED', 'CONFIRMED', 'CANCELLED', 'COMPLETED'] &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp;
@@ -61,7 +65,7 @@ service cloud.firestore {
     }
 
     match /clinics/{clinicId} {
-      allow get: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
+      allow get: if isValidId(clinicId); 
       allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin());
       
       allow create: if isSignedIn() && isValidId(clinicId) && request.auth.uid == clinicId &&
@@ -81,11 +85,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
 
       match /patients/{patientId} {
-         allow get: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
-         allow list: if isSignedIn() && clinicId == request.auth.uid;
+         allow get: if isValidId(patientId) && (clinicId == request.auth.uid || !isSignedIn());
+         allow list: if (isSignedIn() && clinicId == request.auth.uid) || (incoming() == null && request.query.limit <= 1);
          
-         allow create: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid &&
-                          isValidPatient(incoming()) &&
+         allow create: if (isValidPatient(incoming()) && (clinicId == request.auth.uid || !isSignedIn())) &&
+                          isValidId(patientId) &&
                           incoming().createdAt == request.time &&
                           incoming().updatedAt == request.time;
                           
@@ -93,29 +97,27 @@ service cloud.firestore {
                           isValidPatient(incoming()) &&
                           incoming().clinicOwnerId == existing().clinicOwnerId &&
                           incoming().createdAt == existing().createdAt &&
-                          incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name']);
+                           incoming().updatedAt == request.time &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'email']);
                           
          allow delete: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
       }
 
       match /appointments/{appointmentId} {
-         allow get: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid;
-         allow list: if isSignedIn() && clinicId == request.auth.uid;
+         allow get: if isValidId(appointmentId);
+         allow list: if true;
          
-         allow create: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid &&
-                          isValidAppointment(incoming()) &&
-                          exists(/databases/$(database)/documents/clinics/$(clinicId)/patients/$(incoming().patientId)) &&
+         allow create: if isValidAppointment(incoming()) && 
+                          isValidId(appointmentId) &&
                           incoming().createdAt == request.time &&
                           incoming().updatedAt == request.time;
                           
-         allow update: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid &&
-                          isValidAppointment(incoming()) &&
+         allow update: if (isValidAppointment(incoming()) && (clinicId == request.auth.uid || !isSignedIn())) &&
                           incoming().clinicOwnerId == existing().clinicOwnerId &&
                           incoming().patientId == existing().patientId &&
                           incoming().createdAt == existing().createdAt &&
                           incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'date', 'status']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'date', 'time', 'status']);
                           
          allow delete: if isSignedIn() && isValidId(appointmentId) && clinicId == request.auth.uid;
       }
@@ -124,7 +126,6 @@ service cloud.firestore {
          allow get: if isSignedIn() && isValidId(messageId) && clinicId == request.auth.uid;
          allow list: if isSignedIn() && clinicId == request.auth.uid;
          
-         // Only outbound messages might be manually created by UI
          allow create: if isSignedIn() && isValidId(messageId) && clinicId == request.auth.uid &&
                           isValidMessage(incoming()) &&
                           incoming().direction == 'OUTBOUND' &&

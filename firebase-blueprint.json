@@ -25,11 +25,13 @@
       "properties": {
         "clinicOwnerId": { "type": "string", "maxLength": 128 },
         "phone": { "type": "string", "maxLength": 20 },
+        "dni": { "type": "string", "maxLength": 20 },
         "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 100 },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["clinicOwnerId", "phone", "createdAt", "updatedAt"]
+      "required": ["clinicOwnerId", "phone", "dni", "createdAt", "updatedAt"]
     },
     "Appointment": {
       "title": "Appointment",
@@ -38,12 +40,14 @@
       "properties": {
         "clinicOwnerId": { "type": "string", "maxLength": 128 },
         "patientId": { "type": "string", "maxLength": 128 },
+        "patientDni": { "type": "string", "maxLength": 20 },
         "date": { "type": "string", "maxLength": 50 },
+        "time": { "type": "string", "maxLength": 20 },
         "status": { "type": "string", "enum": ["SCHEDULED", "CONFIRMED", "CANCELLED", "COMPLETED"] },
         "createdAt": { "type": "number" },
         "updatedAt": { "type": "number" }
       },
-      "required": ["clinicOwnerId", "patientId", "date", "status", "createdAt", "updatedAt"]
+      "required": ["clinicOwnerId", "patientId", "patientDni", "date", "time", "status", "createdAt", "updatedAt"]
     },
     "Message": {
       "title": "Message",
