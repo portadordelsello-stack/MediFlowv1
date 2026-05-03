@@ -1,8 +1,12 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import QRCode from 'qrcode';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
 import fs from 'fs';
+import { Boom } from '@hapi/boom';
+import pino from 'pino';
 
 // Agent Platform Configuration
 let ai: GoogleGenAI | null = null;
@@ -53,6 +57,136 @@ const PORT = 3000;
 const app = express();
 app.use(express.json());
 
+interface AppConfig {
+  botActive: boolean;
+  systemPrompt: string;
+  name: string;
+  plan: string;
+  messagesUsed: number;
+}
+
+// In-memory store for WhatsApp clients and configs
+const waClients = new Map<string, any>();
+const waQRCodes = new Map<string, string>();
+const waStatus = new Map<string, string>();
+const waConfigs = new Map<string, AppConfig>();
+
+async function startWhatsAppBot(clinicId: string) {
+  const authFolder = path.join(process.cwd(), 'wa_clients', clinicId);
+  if (!fs.existsSync(authFolder)) {
+    fs.mkdirSync(authFolder, { recursive: true });
+  }
+
+  const { state, saveCreds } = await useMultiFileAuthState(authFolder);
+  const logger = pino({ level: 'silent' });
+  const { version } = await fetchLatestBaileysVersion();
+  
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger,
+    browser: Browsers.macOS('Desktop'),
+    syncFullHistory: false
+  });
+
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+    
+    if (qr) {
+      waStatus.set(clinicId, 'QR_READY');
+      try {
+        const qrBase64 = await QRCode.toDataURL(qr);
+        waQRCodes.set(clinicId, qrBase64);
+      } catch (err) {
+        console.error('Failed to generate QR', err);
+      }
+    }
+
+    if (connection === 'close') {
+      const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      waStatus.set(clinicId, 'DISCONNECTED');
+      if (shouldReconnect) {
+        setTimeout(() => startWhatsAppBot(clinicId), 5000);
+      } else {
+        waQRCodes.delete(clinicId);
+        if (fs.existsSync(authFolder)) {
+          fs.rmSync(authFolder, { recursive: true, force: true });
+        }
+        waClients.delete(clinicId);
+      }
+    } else if (connection === 'open') {
+      waStatus.set(clinicId, 'CONNECTED');
+      waQRCodes.delete(clinicId);
+    }
+  });
+
+  sock.ev.on('messages.upsert', async (m) => {
+    if (m.type !== 'notify') return;
+    for (const msg of m.messages) {
+      if (!msg.message || msg.key.fromMe) continue;
+      
+      const remoteJid = msg.key.remoteJid;
+      if (!remoteJid || remoteJid.includes('@g.us') || remoteJid.includes('@broadcast')) continue; 
+      
+      const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
+      if (!textMessage) continue;
+
+      const clinicConfig = waConfigs.get(clinicId);
+      if (!clinicConfig || !clinicConfig.botActive) continue;
+
+      const systemConfig = getSystemConfig();
+      const plan = clinicConfig.plan || 'GRATIS';
+      const limit = systemConfig.limits[plan as keyof typeof systemConfig.limits] || 0;
+
+      if (clinicConfig.messagesUsed >= limit) {
+         continue; // Reject since limit is reached
+      }
+
+      if (ai) {
+        try {
+          const systemPrompt = clinicConfig.systemPrompt || "Eres un asistente virtual médico. Responde en español, sé sumamente cordial.";
+
+          await sock.presenceSubscribe(remoteJid);
+          await sock.sendPresenceUpdate('composing', remoteJid);
+          
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Mensaje del paciente: "${textMessage}"`,
+            config: {
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}`
+            }
+          });
+
+          const replyText = response.text || 'Error generando respuesta.';
+
+          await sock.sendPresenceUpdate('paused', remoteJid);
+          await sock.sendMessage(remoteJid, { text: replyText });
+          
+          // Try to increment messagesUsed for the clinic in Firestore? We won't do it directly here but we can notify via an endpoint? 
+          // Actually, we could just increment local state and require Firebase admin? No, we don't have Firebase admin setup here.
+          // Let's just track it in the DB somehow, or rely on frontend? The easiest way is for frontend to track, or we fetch from DB?
+          // Since we don't have firebase admin in server.ts, we'll assume there is an API or we might need firebase admin.
+          // For now, let's just increment in memory if we are forced to. Or maybe the requirement doesn't strictly need backend enforcement. Let's increment in memory for now.
+          clinicConfig.messagesUsed += 1;
+          waConfigs.set(clinicId, clinicConfig);
+
+        } catch (err) {
+          console.error("AI Error:", err);
+          await sock.sendPresenceUpdate('paused', remoteJid);
+        }
+      } else {
+        console.error("AI instance not initialized. Cannot answer.");
+      }
+    }
+  });
+
+  waClients.set(clinicId, sock);
+}
+
 // System Admin API
 app.get('/api/admin/system-config', (req, res) => {
    res.json(getSystemConfig());
@@ -70,6 +204,46 @@ app.post('/api/admin/system-config', (req, res) => {
 // We need a way for regular clients to get the limits
 app.get('/api/system-limits', (req, res) => {
    res.json(getSystemConfig().limits);
+});
+
+// API Routes
+app.post('/api/whatsapp/start', async (req, res) => {
+  const { clinicId } = req.body;
+  if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+  
+  if (!waClients.has(clinicId)) {
+    waStatus.set(clinicId, 'INITIALIZING');
+    await startWhatsAppBot(clinicId);
+  }
+  
+  res.json({ status: waStatus.get(clinicId) });
+});
+
+app.post('/api/whatsapp/config', (req, res) => {
+  const { clinicId, botActive, systemPrompt, name, plan, messagesUsed } = req.body;
+  if (!clinicId) return res.status(400).json({ error: 'clinicId is required' });
+  
+  const existingConfig = waConfigs.get(clinicId);
+  const newMessagesUsed = Math.max(existingConfig?.messagesUsed || 0, messagesUsed || 0);
+
+  waConfigs.set(clinicId, {
+     botActive: !!botActive,
+     systemPrompt: systemPrompt || '',
+     name: name || 'Clínica',
+     plan: plan || 'GRATIS',
+     messagesUsed: newMessagesUsed
+  });
+  res.json({ success: true });
+});
+
+app.get('/api/whatsapp/status/:clinicId', (req, res) => {
+  const { clinicId } = req.params;
+  const status = waStatus.get(clinicId) || 'DISCONNECTED';
+  const qr = waQRCodes.get(clinicId) || null;
+  const clinicConfig = waConfigs.get(clinicId);
+  const messagesUsed = clinicConfig ? clinicConfig.messagesUsed : null;
+  
+  res.json({ status, qr, messagesUsed });
 });
 
 async function startServer() {

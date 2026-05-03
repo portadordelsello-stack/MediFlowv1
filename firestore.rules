@@ -13,8 +13,8 @@ service cloud.firestore {
     function existing() { return resource.data; }
 
     function isValidClinic(data) {
-      return data.keys().hasAll(['ownerId', 'name', 'specialty', 'plan', 'createdAt', 'updatedAt', 'botActive']) &&
-             data.keys().size() >= 7 && data.keys().size() <= 11 &&
+      return data.keys().hasAll(['ownerId', 'name', 'specialty', 'plan', 'createdAt', 'updatedAt', 'botActive', 'whatsappSessionStatus']) &&
+             data.keys().size() >= 8 && data.keys().size() <= 12 &&
              data.ownerId is string && data.ownerId.size() <= 128 && (data.ownerId == request.auth.uid || isAdmin()) &&
              data.name is string && data.name.size() <= 100 &&
              data.specialty is string && data.specialty.size() <= 100 &&
@@ -23,6 +23,7 @@ service cloud.firestore {
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
              data.botActive is bool &&
+             data.whatsappSessionStatus in ['DISCONNECTED', 'CONNECTED', 'QR_READY'] &&
              (!('systemPrompt' in data) || (data.systemPrompt is string && data.systemPrompt.size() <= 5000)) &&
              (!('messagesUsed' in data) || data.messagesUsed is number);
     }
@@ -74,7 +75,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt == request.time &&
                        (
-                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'systemPrompt', 'messagesUsed'])) || isAdmin()
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'whatsappSessionStatus', 'systemPrompt', 'messagesUsed'])) || isAdmin()
                        );
                        
       allow delete: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
@@ -123,6 +124,7 @@ service cloud.firestore {
          allow get: if isSignedIn() && isValidId(messageId) && clinicId == request.auth.uid;
          allow list: if isSignedIn() && clinicId == request.auth.uid;
          
+         // Only outbound messages might be manually created by UI
          allow create: if isSignedIn() && isValidId(messageId) && clinicId == request.auth.uid &&
                           isValidMessage(incoming()) &&
                           incoming().direction == 'OUTBOUND' &&

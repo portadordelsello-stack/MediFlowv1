@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { Activity, ShieldCheck, HeartPulse, Phone, MessageSquare, X, Calendar } from 'lucide-react';
+import { Activity, ShieldCheck, HeartPulse, QrCode, Phone, MessageSquare, X, Calendar } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -42,7 +42,7 @@ function App() {
           setClinicDocExists(clinicDoc.exists());
         } catch (error) {
           handleFirestoreError(error, OperationType.GET, `clinics/${u.uid}`);
-          setClinicDocExists(false); 
+          setClinicDocExists(false); // Fallback to allowing them to create it if we failed to get it? Or just let it handle
         }
       } else {
         setUser(null);
@@ -75,6 +75,7 @@ function App() {
         plan: 'GRATIS',
         messagesUsed: 0,
         botActive: false,
+        whatsappSessionStatus: 'DISCONNECTED',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -123,10 +124,10 @@ function App() {
                  NUEVO: MOTOR GEMINI 2.5 INTEGRADO
               </div>
               <h1 className="text-5xl lg:text-7xl font-extrabold text-slate-900 tracking-tight leading-[1.1] mb-8">
-                 Tu recepcionista virtual, <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600">disponible 24/7.</span>
+                 Tu recepcionista virtual, <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600">disponible 24/7 en WhatsApp.</span>
               </h1>
               <p className="text-lg lg:text-xl text-slate-500 leading-relaxed mb-10 max-w-2xl">
-                 Convierte más consultas en citas agendadas automáticamente. Entrena a la IA con tus reglas y deja que MediFlex maneje tu agenda y soporte de forma inteligente.
+                 Convierte más consultas en citas agendadas automáticamente. Conecta tu WhatsApp en segundos, entrena a la IA con tus reglas y deja que MediFlex maneje tu agenda por ti.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
@@ -156,7 +157,7 @@ function App() {
                  </div>
                  <h3 className="text-xl font-bold text-slate-900 mb-3">Atención Inmediata</h3>
                  <p className="text-slate-500 leading-relaxed text-sm">
-                    Responde al instante todas las dudas de tus pacientes. La IA entiende el contexto y el tono de tu clínica.
+                    Responde al instante todas las dudas de tus pacientes por WhatsApp. La IA entiende el contexto y el tono de tu clínica.
                  </p>
               </div>
 
@@ -166,17 +167,17 @@ function App() {
                  </div>
                  <h3 className="text-xl font-bold text-slate-900 mb-3">Agenda Inteligente</h3>
                  <p className="text-slate-500 leading-relaxed text-sm">
-                    Sincroniza tus citas sin esfuerzo. La IA detecta la intención del paciente, revisa tu disponibilidad y gestiona el flujo de agendamiento.
+                    Sincroniza tus citas sin esfuerzo. La IA detecta la intención del paciente, revisa tu disponibilidad y agenda el turno.
                  </p>
               </div>
 
               <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl transition-transform hover:-translate-y-1">
                  <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6">
-                    <HeartPulse className="w-7 h-7 text-emerald-500" />
+                    <QrCode className="w-7 h-7 text-emerald-500" />
                  </div>
-                 <h3 className="text-xl font-bold text-slate-900 mb-3">Pensado para Médicos</h3>
+                 <h3 className="text-xl font-bold text-slate-900 mb-3">Setup en 1 Minuto</h3>
                  <p className="text-slate-500 leading-relaxed text-sm">
-                    Diseñado específicamente para el sector salud. Cumple con los estándares de cordialidad y precisión que tu práctica requiere.
+                    No necesitas técnicos ni integradores. Escanea un código QR con el WhatsApp de tu clínica y la IA tomará el mando.
                  </p>
               </div>
            </div>
@@ -193,7 +194,7 @@ function App() {
                     <div className="text-4xl font-extrabold text-slate-900 mb-6">$0<span className="text-lg text-slate-500 font-normal">/mes</span></div>
                     <ul className="space-y-3 mb-8 flex-1">
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Bots AI auto-regulados</li>
-                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Entrenamiento personalizado</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Integración WhatsApp Web</li>
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 100 mensajes límite mensuales</li>
                     </ul>
                     <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Empezar gratis</button>
@@ -206,7 +207,7 @@ function App() {
                     <div className="text-4xl font-extrabold text-white mb-6">$39<span className="text-lg text-slate-400 font-normal">/mes</span></div>
                     <ul className="space-y-3 mb-8 flex-1">
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Todo lo de GRATIS</li>
-                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Instrucciones avanzadas de IA</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Instrucciones personalizadas de IA</li>
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> 500 mensajes límite mensuales</li>
                     </ul>
                     <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
