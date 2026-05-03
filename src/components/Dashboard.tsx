@@ -676,29 +676,8 @@ export default function Dashboard({ user }: { user: User }) {
                   )}
                 </div>
                 
-                <div className="border-t border-slate-100 pt-6 flex flex-col gap-6">
-                  <div>
-                    <h4 className="font-semibold text-slate-900 text-sm mb-2">Link de tu Agenda Online</h4>
-                    <div className="flex gap-2">
-                       <input 
-                         readOnly
-                         value={`${window.location.protocol}//${window.location.host}/reservar/${user.uid}`}
-                         className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600"
-                       />
-                       <button 
-                         onClick={() => {
-                           navigator.clipboard.writeText(`${window.location.protocol}//${window.location.host}/reservar/${user.uid}`);
-                           alert("Link copiado al portapapeles");
-                         }}
-                         className="px-3 py-2 bg-sky-100 text-sky-700 rounded-lg text-xs font-bold hover:bg-sky-200 transition-colors"
-                       >
-                         Copiar
-                       </button>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-2">Comparte este link con tus pacientes o ponlo en tu bio de Instagram.</p>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-50 pt-6">
+                <div className="border-t border-slate-100 pt-6 flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-semibold text-slate-900 text-sm">Activar Motor de Respuestas (Bot AI)</h4>
                       <p className="text-xs text-slate-500">Permite que Gemini comience a responder auto-mágicamente.</p>
