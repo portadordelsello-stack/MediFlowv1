@@ -98,7 +98,9 @@ const waConfigs = new Map<string, AppConfig>();
 
 async function startWhatsAppBot(clinicId: string, host: string) {
   const authFolder = path.join(process.cwd(), 'wa_clients', clinicId);
-  const bookingUrl = `https://${host}/reservar/${clinicId}`;
+  const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/.test(host);
+  const protocol = isIP ? 'http' : 'https';
+  const bookingUrl = `${protocol}://${host}/reservar/${clinicId}`;
   if (!fs.existsSync(authFolder)) {
     fs.mkdirSync(authFolder, { recursive: true });
   }
@@ -235,12 +237,18 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           await sock.presenceSubscribe(remoteJid);
           await sock.sendPresenceUpdate('composing', remoteJid);
           
-          const bookingUrl = `https://${host}/reservar/${clinicId}`;
+          const isIP = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}/.test(host);
+          const protocol = isIP ? 'http' : 'https';
+          const bookingUrl = `${protocol}://${host}/reservar/${clinicId}`;
           const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
             config: {
-              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}`
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. 
+
+IMPORTANTE SOBRE EL LINK DE AGENDA:
+Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}
+NO uses formato Markdown (como [texto](url)) para el link. Envía el link como texto plano y directo para que sea clickeable en WhatsApp.`
             }
           });
 
