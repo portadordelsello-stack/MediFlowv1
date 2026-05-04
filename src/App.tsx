@@ -369,9 +369,37 @@ function App() {
                     </p>
                  </div>
 
-                 {/* BENEFITS (Truncated for brevity, kept structure) */}
+                 {/* BENEFITS */}
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto border-t border-slate-100 pt-20">
-                    {/* ... */}
+                    <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl transition-transform hover:-translate-y-1">
+                       <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6">
+                          <MessageSquare className="w-7 h-7 text-sky-500" />
+                       </div>
+                       <h3 className="text-xl font-bold text-slate-900 mb-3">Atención Inmediata</h3>
+                       <p className="text-slate-500 leading-relaxed text-sm">
+                          Responde al instante todas las dudas de tus pacientes por WhatsApp. La IA entiende el contexto y el tono de tu clínica.
+                       </p>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl transition-transform hover:-translate-y-1">
+                       <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6">
+                          <Calendar className="w-7 h-7 text-indigo-500" />
+                       </div>
+                       <h3 className="text-xl font-bold text-slate-900 mb-3">Agenda Inteligente</h3>
+                       <p className="text-slate-500 leading-relaxed text-sm">
+                          Sincroniza tus citas sin esfuerzo. La IA detecta la intención del paciente, revisa tu disponibilidad y agenda el turno.
+                       </p>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 p-8 rounded-3xl transition-transform hover:-translate-y-1">
+                       <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mb-6">
+                          <QrCode className="w-7 h-7 text-emerald-500" />
+                       </div>
+                       <h3 className="text-xl font-bold text-slate-900 mb-3">Setup en 1 Minuto</h3>
+                       <p className="text-slate-500 leading-relaxed text-sm">
+                          No necesitas técnicos ni integradores. Escanea un código QR con el WhatsApp de tu clínica y la IA tomará el mando.
+                       </p>
+                    </div>
                  </div>
               </main>
 
@@ -450,6 +478,7 @@ function App() {
       </Routes>
     </BrowserRouter>
   );
+
 }
 
 export default App;
