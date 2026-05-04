@@ -7,25 +7,25 @@ import path from 'path';
 import fs from 'fs';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
-import * as admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
+import { initializeApp, App } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
 // Initialize Firebase Admin (Lazy)
 const firebaseAppConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
 
-let adminApp: admin.app.App | null = null;
-let firestoreDb: admin.firestore.Firestore | null = null;
+let adminApp: App | null = null;
+let firestoreDb: any | null = null;
 
 function getFirebaseAdmin() {
   if (!adminApp) {
-    adminApp = admin.initializeApp({
+    adminApp = initializeApp({
       projectId: firebaseAppConfig.projectId,
     });
   }
   return adminApp;
 }
 
-function getDb(): admin.firestore.Firestore {
+function getDb() {
   if (!firestoreDb) {
     const app = getFirebaseAdmin();
     firestoreDb = getFirestore(app, firebaseAppConfig.firestoreDatabaseId);
@@ -203,7 +203,7 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                 .get();
 
               if (!appSnap.empty) {
-                await appSnap.docs[0].ref.update({ status: 'CONFIRMED', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+                await appSnap.docs[0].ref.update({ status: 'CONFIRMED', updatedAt: FieldValue.serverTimestamp() });
               } else {
                 // Create if it doesn't exist (though it should have been created by the portal or we can create it now)
                 await appointmentsRef.add({
@@ -213,8 +213,8 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   date,
                   time,
                   status: 'CONFIRMED',
-                  createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                  updatedAt: admin.firestore.FieldValue.serverTimestamp()
+                  createdAt: FieldValue.serverTimestamp(),
+                  updatedAt: FieldValue.serverTimestamp()
                 });
               }
               
@@ -222,8 +222,8 @@ async function startWhatsAppBot(clinicId: string, host: string) {
               
               const clinicRef = getDb().collection('clinics').doc(clinicId);
               await clinicRef.update({ 
-                messagesUsed: admin.firestore.FieldValue.increment(1),
-                updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+                messagesUsed: FieldValue.increment(1),
+                updatedAt: FieldValue.serverTimestamp() 
               });
               
               continue; // Skip AI generation for this message as it's handled
@@ -252,8 +252,8 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           // Increment messagesUsed in DB
           const clinicRef = getDb().collection('clinics').doc(clinicId);
           await clinicRef.update({ 
-            messagesUsed: admin.firestore.FieldValue.increment(1),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+            messagesUsed: FieldValue.increment(1),
+            updatedAt: FieldValue.serverTimestamp() 
           });
 
           clinicConfig.messagesUsed += 1;
