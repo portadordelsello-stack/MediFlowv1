@@ -97,9 +97,9 @@ function App() {
         <header className="fixed top-0 left-0 right-0 h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 z-50 flex items-center justify-between px-6 lg:px-12">
           <div className="flex items-center gap-3">
              <div className="w-10 h-10 bg-sky-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm">
-                M
+                <Calendar className="w-6 h-6" />
              </div>
-             <span className="text-xl font-bold tracking-tight text-slate-900">MediFlex</span>
+             <span className="text-xl font-bold tracking-tight text-slate-900">Turnely</span>
           </div>
           <nav className="flex items-center gap-4">
              <button 
@@ -128,7 +128,7 @@ function App() {
                  Tu recepcionista virtual, <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-indigo-600">disponible 24/7 en WhatsApp.</span>
               </h1>
               <p className="text-lg lg:text-xl text-slate-500 leading-relaxed mb-10 max-w-2xl">
-                 Convierte más consultas en citas agendadas automáticamente. Conecta tu WhatsApp en segundos, entrena a la IA con tus reglas y deja que MediFlex maneje tu agenda por ti.
+                 Convierte más consultas en citas agendadas automáticamente. Conecta tu WhatsApp en segundos, entrena a la IA con tus reglas y deja que Turnely maneje tu agenda por ti.
               </p>
               
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
