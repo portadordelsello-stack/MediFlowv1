@@ -3,7 +3,6 @@ import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -57,11 +56,7 @@ export default function Dashboard({ user }: { user: User }) {
     return unsubscribe;
   }, [user.uid]);
 
-  // Simulator state
-  const [simulatorMessages, setSimulatorMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
-  const [simulatorInput, setSimulatorInput] = useState('');
-  const [isSimulating, setIsSimulating] = useState(false);
-  
+
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
   const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
@@ -235,32 +230,6 @@ export default function Dashboard({ user }: { user: User }) {
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
 
-  const handleSimulate = async () => {
-    if (!simulatorInput.trim()) return;
-    const newMsg = { role: 'user' as const, text: simulatorInput };
-    setSimulatorMessages(prev => [...prev, newMsg]);
-    setSimulatorInput('');
-    setIsSimulating(true);
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          ...simulatorMessages.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-          { role: 'user', parts: [{ text: newMsg.text }] }
-        ],
-        config: {
-          systemInstruction: systemPrompt || `Eres un asistente virtual para la ${clinic?.name || 'clínica'}.`
-        }
-      });
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: response.text || '' }]);
-    } catch (e) {
-      console.error(e);
-      setSimulatorMessages(prev => [...prev, { role: 'model', text: 'Error en la simulación.' }]);
-    }
-    setIsSimulating(false);
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex overflow-hidden">
@@ -552,62 +521,6 @@ export default function Dashboard({ user }: { user: User }) {
                 </div>
               </div>
 
-              {/* SIMULADOR WHATSAPP */}
-              <div className="bg-[#efeae2] border border-slate-200 rounded-2xl shadow-sm flex flex-col h-[700px] overflow-hidden relative">
-                 <div className="bg-[#00a884] text-white p-4 flex items-center gap-4 shrink-0 shadow-sm z-10">
-                    <div className="w-10 h-10 bg-white/20 flex items-center justify-center rounded-full">
-                       <Bot className="w-6 h-6" />
-                    </div>
-                    <div>
-                       <p className="font-semibold">{clinic?.name || 'Clínica'}</p>
-                       <p className="text-[11px] text-emerald-100">Simulador de WhatsApp (IA Reactiva)</p>
-                    </div>
-                 </div>
-                 
-                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
-                    <div className="text-center my-2">
-                       <span className="text-[11px] bg-black/5 text-slate-600 px-3 py-1 rounded-lg uppercase tracking-wider font-semibold">Hoy</span>
-                    </div>
-
-                    <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                       <p className="text-[14px] text-slate-800 leading-relaxed">
-                         ¡Hola! Esto es un simulador de WhatsApp. Las respuestas generadas aquí usarán el contenido que hayas escrito en las instrucciones de la izquierda. 👋
-                       </p>
-                    </div>
-
-                    {simulatorMessages.map((m, i) => (
-                       <div key={i} className={`max-w-[85%] rounded-lg p-3 shadow-sm ${m.role === 'user' ? 'bg-[#d9fdd3] self-end rounded-tr-none' : 'bg-white self-start rounded-tl-none'}`}>
-                           <p className="text-[14px] text-slate-800 leading-relaxed whitespace-pre-wrap">{m.text}</p>
-                       </div>
-                    ))}
-
-                    {isSimulating && (
-                       <div className="max-w-[85%] bg-white rounded-lg rounded-tl-none p-3 shadow-sm self-start">
-                          <p className="text-[14px] text-slate-500 font-medium animate-pulse">Escribiendo...</p>
-                       </div>
-                    )}
-                 </div>
-
-                 <div className="bg-[#f0f2f5] p-3 flex gap-2 items-end shrink-0 pointer-events-auto z-10">
-                    <div className="flex-1 bg-white rounded-xl break-words min-h-[44px] flex items-center px-4 overflow-hidden">
-                       <input 
-                         type="text" 
-                         value={simulatorInput}
-                         onChange={e => setSimulatorInput(e.target.value)}
-                         onKeyDown={e => e.key === 'Enter' && handleSimulate()}
-                         placeholder="Escribe un mensaje..."
-                         className="w-full bg-transparent border-none focus:outline-none text-[15px] text-slate-700 py-2.5"
-                       />
-                    </div>
-                    <button 
-                       onClick={handleSimulate}
-                       disabled={isSimulating || !simulatorInput.trim()}
-                       className="w-11 h-11 rounded-full bg-[#00a884] flex items-center justify-center text-white disabled:opacity-50 shrink-0 transition-opacity hover:opacity-90 shadow-sm"
-                    >
-                       <ArrowRight className="w-5 h-5" />
-                    </button>
-                 </div>
-              </div>
             </div>
           )}
 
