@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X } from 'lucide-react';
 
@@ -64,6 +64,11 @@ export default function Dashboard({ user }: { user: User }) {
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
   const [allClinics, setAllClinics] = useState<any[]>([]);
+  const [editingClinic, setEditingClinic] = useState<any>(null);
+  const [clinicToDelete, setClinicToDelete] = useState<any>(null);
+  const [deletingClinicId, setDeletingClinicId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (isAdmin && activeTab === 'admin') {
@@ -85,6 +90,42 @@ export default function Dashboard({ user }: { user: User }) {
       await updateDoc(doc(db, 'clinics', clinicId), { plan, updatedAt: serverTimestamp() });
     } catch (error) {
       console.error("Error updating clinic plan:", error);
+    }
+  };
+
+  const confirmDeleteClinic = async () => {
+    if (!clinicToDelete) return;
+    setIsDeleting(true);
+    setDeletingClinicId(clinicToDelete.id);
+    try {
+      await deleteDoc(doc(db, 'clinics', clinicToDelete.id));
+      setClinicToDelete(null);
+    } catch (error) {
+      console.error("Error deleting clinic:", error);
+    } finally {
+      setIsDeleting(false);
+      setDeletingClinicId(null);
+    }
+  };
+
+  const handleDeleteClick = (clinic: any) => {
+    setClinicToDelete(clinic);
+  };
+
+  const handleEditClinic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClinic) return;
+    try {
+      await updateDoc(doc(db, 'clinics', editingClinic.id), {
+        name: editingClinic.name,
+        specialty: editingClinic.specialty,
+        plan: editingClinic.plan,
+        updatedAt: serverTimestamp()
+      });
+      setEditingClinic(null);
+    } catch (error) {
+      console.error("Error updating clinic:", error);
+      alert("Error al actualizar la clínica.");
     }
   };
 
@@ -685,140 +726,312 @@ export default function Dashboard({ user }: { user: User }) {
 
           {/* TAB: ADMIN */}
           {isAdmin && activeTab === 'admin' && (
-            <div className="max-w-2xl mx-auto space-y-8 animate-fade-in-up">
+            <div className="max-w-6xl mx-auto space-y-8 animate-fade-in-up">
               <div className="bg-white border border-indigo-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
                   <Lock className="w-48 h-48 text-indigo-900" />
                 </div>
                 <div className="relative z-10">
                   <h3 className="text-xl font-bold text-slate-900 mb-2 flex items-center gap-2">
-                    <Lock className="w-6 h-6 text-indigo-600" />
-                    Panel de Administración Global
+                    <ShieldCheck className="w-6 h-6 text-indigo-600" />
+                    Configuración Global del Sistema
                   </h3>
-                  <p className="text-sm text-slate-500 mb-8 max-w-lg">
-                    Configuración a nivel de sistema. Modificar estos valores afectará a **todas** las clínicas conectadas.
-                  </p>
-
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Agent Platform API Key
-                      </label>
-                      <input 
-                        type="password" 
-                        value={adminConfig.apiKey}
-                        onChange={e => setAdminConfig({...adminConfig, apiKey: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                        placeholder="AIzaSy..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Vertex AI Project ID
-                      </label>
-                      <input 
-                        type="text" 
-                        value={adminConfig.projectId}
-                        onChange={e => setAdminConfig({...adminConfig, projectId: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                        placeholder="tu-id-de-proyecto-gcp"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Vertex AI Location
-                      </label>
-                      <input 
-                        type="text" 
-                        value={adminConfig.location}
-                        onChange={e => setAdminConfig({...adminConfig, location: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                        placeholder="us-central1"
-                      />
-                    </div>
-                    
-                    <div className="border-t border-slate-200 pt-6 mt-6">
-                      <h4 className="font-semibold text-slate-900 mb-4">Límites de Suscripción (Mensajes)</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1">GRATIS</label>
-                          <input 
-                            type="number" 
-                            value={adminConfig.limits.GRATIS}
-                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, GRATIS: parseInt(e.target.value) || 0 }})}
-                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1">BÁSICO</label>
-                          <input 
-                            type="number" 
-                            value={adminConfig.limits.BASICO}
-                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, BASICO: parseInt(e.target.value) || 0 }})}
-                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1">PREMIUM</label>
-                          <input 
-                            type="number" 
-                            value={adminConfig.limits.PREMIUM}
-                            onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, PREMIUM: parseInt(e.target.value) || 0 }})}
-                            className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
-                          />
-                        </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Gemini API Key</label>
+                        <input 
+                          type="password" 
+                          value={adminConfig.apiKey}
+                          onChange={e => setAdminConfig({...adminConfig, apiKey: e.target.value})}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                          placeholder="••••••••••••••••"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Project ID</label>
+                        <input 
+                          type="text" 
+                          value={adminConfig.projectId}
+                          onChange={e => setAdminConfig({...adminConfig, projectId: e.target.value})}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                        />
                       </div>
                     </div>
-
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Límites por Plan (Mensajes/Mes)</h4>
+                      <div className="grid grid-cols-3 gap-3">
+                        {['GRATIS', 'BASICO', 'PREMIUM'].map(p => (
+                          <div key={p}>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">{p}</label>
+                            <input 
+                              type="number" 
+                              value={adminConfig.limits[p as keyof typeof adminConfig.limits]}
+                              onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, [p]: parseInt(e.target.value) || 0 }})}
+                              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-8 flex justify-end">
                     <button 
                       onClick={saveAdminConfig}
                       disabled={savingAdmin}
-                      className="mt-6 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-xl transition-all shadow-sm flex items-center gap-2"
                     >
-                      {savingAdmin ? 'Guardando...' : 'Guardar Configuración Global'}
+                      {savingAdmin ? 'Guardando...' : 'Actualizar Configuración'}
                     </button>
                   </div>
                 </div>
               </div>
 
-              {/* Admin Clinics List */}
-              <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-                 <div className="p-6 border-b border-slate-100 bg-slate-50">
-                    <h3 className="font-bold text-slate-900">Cuentas (Clínicas)</h3>
-                    <p className="text-sm text-slate-500">Administra las suscripciones de los usuarios registrados.</p>
-                 </div>
-                 <div className="divide-y divide-slate-100">
-                    {allClinics.map(c => (
-                       <div key={c.id} className="p-6 flex flex-col md:flex-row items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                          <div className="flex-1">
-                             <h4 className="font-semibold text-slate-900">{c.name || 'Sin Nombre'}</h4>
-                             <p className="text-xs text-slate-500">ID: {c.ownerId} • Bot: {c.botActive ? 'Activado' : 'Desactivado'}</p>
-                             <div className="mt-2 text-sm text-slate-600 font-medium">
-                                Mensajes Usados: <span className={c.messagesUsed >= (systemLimits[c.plan as keyof typeof systemLimits] || 0) ? 'text-red-600' : 'text-emerald-600'}>{c.messagesUsed || 0}</span> / {systemLimits[c.plan as keyof typeof systemLimits] || 0}
-                             </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                             <select
-                                value={c.plan || 'GRATIS'}
-                                onChange={(e) => updateClinicPlan(c.id, e.target.value)}
-                                className="px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                             >
-                                <option value="GRATIS">GRATIS</option>
-                                <option value="BASICO">BÁSICO</option>
-                                <option value="PREMIUM">PREMIUM</option>
-                             </select>
-                          </div>
-                       </div>
-                    ))}
-                    {allClinics.length === 0 && (
-                       <div className="p-8 text-center text-slate-500 text-sm">
-                          No hay clínicas registradas.
-                       </div>
-                    )}
-                 </div>
+              {/* Enhanced Clinics List */}
+              <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+                <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-900">Gestión de Clínicas</h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {allClinics.length} clínicas registradas en el sistema.
+                    </p>
+                  </div>
+                  <div className="relative w-full md:w-72">
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                      <Settings className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <input 
+                      type="text"
+                      placeholder="Buscar por nombre o ID..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-separate border-spacing-0">
+                    <thead>
+                      <tr className="bg-slate-50/50">
+                        <th className="px-8 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">Clínica</th>
+                        <th className="px-8 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">Plan / Créditos</th>
+                        <th className="px-8 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">Estado Bot</th>
+                        <th className="px-8 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {allClinics.filter(c => 
+                        c.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                        c.id.includes(searchTerm) ||
+                        c.specialty?.toLowerCase().includes(searchTerm.toLowerCase())
+                      ).map(c => {
+                        const limit = systemLimits[c.plan as keyof typeof systemLimits] || 0;
+                        const usage = c.messagesUsed || 0;
+                        const usagePercent = Math.min(100, (usage / limit) * 100);
+                        
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-8 py-6">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg shadow-sm">
+                                  {c.name?.charAt(0) || '?'}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-900">{c.name || 'Sin nombre'}</p>
+                                  <p className="text-xs text-slate-500">{c.specialty || 'General'}</p>
+                                  <code className="text-[10px] text-slate-400 mt-1 block">ID: {c.id}</code>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center justify-between">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                    c.plan === 'PREMIUM' ? 'bg-indigo-100 text-indigo-700' :
+                                    c.plan === 'BASICO' ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-700'
+                                  }`}>
+                                    {c.plan}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-500">{usage} / {limit}</span>
+                                </div>
+                                <div className="w-32 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${usagePercent > 90 ? 'bg-red-500' : usagePercent > 70 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                    style={{ width: `${usagePercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6 text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${c.botActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                                <span className={c.botActive ? 'text-emerald-700 font-medium' : 'text-slate-500'}>
+                                  {c.botActive ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-8 py-6">
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => setEditingClinic({ ...c })}
+                                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent"
+                                  title="Editar"
+                                >
+                                  <Settings className="w-5 h-5" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteClick(c)}
+                                  disabled={isDeleting && deletingClinicId === c.id}
+                                  className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent disabled:opacity-50 cursor-pointer"
+                                  title="Eliminar"
+                                >
+                                  {isDeleting && deletingClinicId === c.id ? (
+                                    <div className="w-5 h-5 border-2 border-red-200 border-t-red-600 rounded-full animate-spin" />
+                                  ) : (
+                                    <X className="w-5 h-5" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {allClinics.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="px-8 py-20 text-center">
+                            <Bot className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                            <p className="text-slate-900 font-bold">No hay clínicas registradas</p>
+                            <p className="text-slate-500 text-sm">Las clínicas de los usuarios aparecerán aquí.</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
+
+              {/* Delete Confirm Modal */}
+              {clinicToDelete && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
+                      <h4 className="text-lg font-bold text-red-600 flex items-center gap-2">
+                        <Lock className="w-5 h-5" /> Eliminar Clínica
+                      </h4>
+                      <button type="button" onClick={() => setClinicToDelete(null)} disabled={isDeleting} className="text-slate-400 hover:text-slate-600 disabled:opacity-50">
+                        <X className="w-6 h-6" />
+                      </button>
+                    </div>
+                    <div className="p-8 space-y-5">
+                      <p className="text-slate-700 text-sm">
+                        ¿Estás seguro de que deseas eliminar permanentemente la clínica <strong className="text-slate-900">{clinicToDelete.name || 'Sin nombre'}</strong>?
+                      </p>
+                      <div className="bg-red-50 p-4 rounded-2xl border border-red-100 mt-4">
+                        <p className="text-[12px] text-red-700 font-medium">
+                          Esta acción <strong>no se puede deshacer</strong> y borrará toda la información, turnos y pacientes asociadas a esta clínica de forma irreversible.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                      <button 
+                        type="button"
+                        onClick={() => setClinicToDelete(null)}
+                        disabled={isDeleting}
+                        className="flex-1 px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={confirmDeleteClinic}
+                        disabled={isDeleting}
+                        className="flex-1 px-4 py-3 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-md shadow-red-100 disabled:opacity-50 flex items-center justify-center"
+                      >
+                        {isDeleting ? 'Eliminando...' : 'Sí, Eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Modal */}
+              {editingClinic && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+                    <form onSubmit={handleEditClinic}>
+                      <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
+                        <h4 className="text-lg font-bold text-slate-900">Editar Clínica</h4>
+                        <button type="button" onClick={() => setEditingClinic(null)} className="text-slate-400 hover:text-slate-600">
+                          <X className="w-6 h-6" />
+                        </button>
+                      </div>
+                      <div className="p-8 space-y-5">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nombre de la Clínica</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={editingClinic.name}
+                            onChange={e => setEditingClinic({...editingClinic, name: e.target.value})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Especialidad</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={editingClinic.specialty}
+                            onChange={e => setEditingClinic({...editingClinic, specialty: e.target.value})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Plan Maestro</label>
+                          <select
+                            value={editingClinic.plan}
+                            onChange={e => setEditingClinic({...editingClinic, plan: e.target.value})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm bg-white"
+                          >
+                            <option value="GRATIS">GRATIS</option>
+                            <option value="BASICO">BÁSICO</option>
+                            <option value="PREMIUM">PREMIUM</option>
+                          </select>
+                        </div>
+                        
+                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-4">
+                           <div className="flex items-center gap-3 text-slate-600">
+                              <ShieldCheck className="w-5 h-5 text-indigo-500" />
+                              <span className="text-xs font-medium uppercase tracking-wider">Permisos de Administrador</span>
+                           </div>
+                           <p className="text-[11px] text-slate-500 mt-2">
+                              Estás modificando una cuenta de forma externa. Los cambios se sincronizarán con el panel del usuario.
+                           </p>
+                        </div>
+                      </div>
+                      <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                        <button 
+                          type="button"
+                          onClick={() => setEditingClinic(null)}
+                          className="flex-1 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button 
+                          type="submit"
+                          className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-md shadow-indigo-100"
+                        >
+                          Guardar Cambios
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
         </div>
       </main>
     </div>
