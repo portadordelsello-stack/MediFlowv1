@@ -30,7 +30,7 @@ service cloud.firestore {
 
     function isValidPatient(data) {
       return data.keys().hasAll(['clinicOwnerId', 'phone', 'dni', 'createdAt', 'updatedAt']) &&
-             data.keys().size() >= 5 && data.keys().size() <= 6 &&
+             data.keys().size() >= 5 && data.keys().size() <= 7 &&
              data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && (data.clinicOwnerId == request.auth.uid || !isSignedIn()) &&
              data.phone is string && data.phone.size() <= 20 &&
              data.dni is string && data.dni.size() <= 20 &&
@@ -85,10 +85,10 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());
 
       match /patients/{patientId} {
-         allow get: if isValidId(patientId) && (clinicId == request.auth.uid || !isSignedIn());
-         allow list: if (isSignedIn() && clinicId == request.auth.uid) || (incoming() == null && request.query.limit <= 1);
+         allow get: if isValidId(patientId);
+         allow list: if (request.auth != null && clinicId == request.auth.uid) || request.query.limit <= 1;
          
-         allow create: if (isValidPatient(incoming()) && (clinicId == request.auth.uid || !isSignedIn())) &&
+         allow create: if (isValidPatient(incoming()) && (request.auth == null || clinicId == request.auth.uid)) &&
                           isValidId(patientId) &&
                           incoming().createdAt == request.time &&
                           incoming().updatedAt == request.time;

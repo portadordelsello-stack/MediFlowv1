@@ -27,6 +27,9 @@ export default function BookingPortal() {
       getDoc(doc(db, 'clinics', clinicId)).then(s => {
         if (s.exists()) setClinic(s.data());
         setLoading(false);
+      }).catch(err => {
+        console.error("Error fetching clinic visibility:", err);
+        setLoading(false);
       });
     }
   }, [clinicId]);
@@ -79,6 +82,8 @@ export default function BookingPortal() {
       const q = query(collection(db, 'clinics', clinicId, 'appointments'), where('date', '==', selectedDate));
       getDocs(q).then(snapshot => {
         setOccupiedSlots(snapshot.docs.map(d => d.data().time));
+      }).catch(err => {
+        console.error("Error fetching available appointments: ", err);
       });
     }
   }, [selectedDate, clinicId]);
