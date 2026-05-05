@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle } from 'lucide-react';
 
@@ -36,7 +36,7 @@ export default function BookingPortal() {
     setLoading(true);
     setError('');
     try {
-      const q = query(collection(db, 'clinics', clinicId, 'patients'), where('dni', '==', dni), where('clinicOwnerId', '==', clinicId));
+      const q = query(collection(db, 'clinics', clinicId, 'patients'), where('dni', '==', dni), where('clinicOwnerId', '==', clinicId), limit(1));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const pData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
