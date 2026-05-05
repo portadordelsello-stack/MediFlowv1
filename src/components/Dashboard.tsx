@@ -119,6 +119,7 @@ export default function Dashboard({ user }: { user: User }) {
       await updateDoc(doc(db, 'clinics', editingClinic.id), {
         name: editingClinic.name,
         specialty: editingClinic.specialty,
+        whatsappNumber: editingClinic.whatsappNumber || '',
         plan: editingClinic.plan,
         updatedAt: serverTimestamp()
       });
@@ -672,6 +673,10 @@ export default function Dashboard({ user }: { user: User }) {
                         <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Especialidad</p>
                         <p className="text-slate-800 font-medium">{clinic?.specialty}</p>
                      </div>
+                     <div>
+                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Número de WhatsApp</p>
+                        <p className="text-slate-800 font-medium">{clinic?.whatsappNumber || 'No configurado'}</p>
+                     </div>
                   </div>
                </div>
 
@@ -984,6 +989,15 @@ export default function Dashboard({ user }: { user: User }) {
                             required
                             value={editingClinic.specialty}
                             onChange={e => setEditingClinic({...editingClinic, specialty: e.target.value})}
+                            className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1.5">Número de WhatsApp</label>
+                          <input 
+                            type="text" 
+                            value={editingClinic.whatsappNumber || ''}
+                            onChange={e => setEditingClinic({...editingClinic, whatsappNumber: e.target.value})}
                             className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                           />
                         </div>

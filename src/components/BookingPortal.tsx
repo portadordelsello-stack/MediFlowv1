@@ -89,11 +89,31 @@ export default function BookingPortal() {
   }, [selectedDate, clinicId]);
 
   const generateWhatsAppLink = () => {
-    if (!clinic?.phone || !selectedDate || !selectedTime) return '#';
+    if (!clinic?.whatsappNumber) return '#';
     // Clean phone number (remove non-digits, fix prefix if needed)
-    const cleanPhone = clinic.phone.replace(/\D/g, '');
-    const message = `Hola! Soy ${patient?.name} (DNI: ${dni}). He reservado un turno para el ${selectedDate} a las ${selectedTime}h.`;
+    const cleanPhone = clinic.whatsappNumber.replace(/\D/g, '');
+    const message = `listo, ya he reservado el turno`;
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  };
+
+  const confirmReservation = async () => {
+    if (!clinicId || !patient || !selectedDate || !selectedTime) return;
+    try {
+      await addDoc(collection(db, 'clinics', clinicId, 'appointments'), {
+        clinicOwnerId: clinicId,
+        patientId: patient.id,
+        patientDni: dni,
+        date: selectedDate,
+        time: selectedTime,
+        status: 'SCHEDULED',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      window.location.href = generateWhatsAppLink();
+    } catch (err) {
+      console.error(err);
+      setError('Error al confirmar su turno. Por favor intente más tarde.');
+    }
   };
 
   if (loading && !clinic) {
@@ -291,15 +311,14 @@ export default function BookingPortal() {
                     </div>
                  </div>
 
-                 <a 
-                   href={generateWhatsAppLink()}
-                   target="_blank"
-                   rel="noopener noreferrer"
+                 <button 
+                   onClick={confirmReservation}
                    className="w-full bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-lg flex items-center justify-center gap-3"
                  >
                     <MessageCircle className="w-6 h-6" />
                     Reservar por WhatsApp
-                 </a>
+                 </button>
+                 {error && <p className="text-sm text-red-500 font-medium mt-4">{error}</p>}
                  <button onClick={() => setStep('slots')} className="mt-4 text-sm font-bold text-slate-400 hover:text-slate-600">Cambiar fecha u hora</button>
               </div>
             )}

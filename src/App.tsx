@@ -42,6 +42,7 @@ function MainApp() {
 
   const [clinicName, setClinicName] = useState('');
   const [specialty, setSpecialty] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -77,13 +78,14 @@ function MainApp() {
 
   const createClinic = async (e: FormEvent) => {
     e.preventDefault();
-    if (!user || !clinicName || !specialty) return;
+    if (!user || !clinicName || !specialty || !whatsappNumber) return;
     setSavingSettings(true);
     try {
       await setDoc(doc(db, 'clinics', user.uid), {
         ownerId: user.uid,
         name: clinicName,
         specialty,
+        whatsappNumber,
         plan: 'GRATIS',
         messagesUsed: 0,
         botActive: false,
@@ -299,6 +301,18 @@ function MainApp() {
                       placeholder="Ej. Odontología, Medicina General..."
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Número de WhatsApp</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={whatsappNumber}
+                      onChange={e => setWhatsappNumber(e.target.value)}
+                      placeholder="Ej. 543424638046"
+                      className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">Con código de país, sin signos ni espacios.</p>
                  </div>
               </div>
 
