@@ -240,7 +240,7 @@ async function startWhatsAppBot(clinicId: string, host: string) {
             model: 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
             config: {
-              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}`
+              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`
             }
           });
 
