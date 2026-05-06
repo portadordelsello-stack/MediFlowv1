@@ -20,6 +20,27 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
 
+const isDateBlocked = (dateStr: string, clinicObj: any) => {
+  if (!dateStr || !clinicObj) return false;
+  // Determine if it's explicitly explicitly unblocked
+  const isWeekend = new Date(dateStr + "T00:00:00").getDay() === 0 || new Date(dateStr + "T00:00:00").getDay() === 6;
+  if (isWeekend) {
+    // If it's a weekend, it's blocked UNLESS explicitly unblocked
+    return !clinicObj.unblockedDays?.includes(dateStr);
+  }
+  return clinicObj.blockedDays?.includes(dateStr) || false;
+};
+
+const isTimeSlotBlocked = (dateStr: string, timeStr: string, clinicObj: any) => {
+  if (!clinicObj || !timeStr) return false;
+  const defaultBlockedTimes = ['06:00', '06:30', '07:00', '07:30', '08:00', '19:00', '19:30', '20:00', '20:30', '21:00'];
+  const isDefaultBlockedTime = defaultBlockedTimes.includes(timeStr);
+  if (isDefaultBlockedTime) {
+    return !clinicObj.unblockedSlots?.[dateStr]?.includes(timeStr);
+  }
+  return clinicObj.blockedSlots?.[dateStr]?.includes(timeStr) || false;
+};
+
 export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -84,6 +105,7 @@ export default function Dashboard({ user }: { user: User }) {
   // Appt state
   const [apptForm, setApptForm] = useState<any>(null);
   const [apptToDelete, setApptToDelete] = useState<string | null>(null);
+  const [selectedAgendaSlot, setSelectedAgendaSlot] = useState<string>('');
   const [savingAppt, setSavingAppt] = useState(false);
   
   const [currentMonthDate, setCurrentMonthDate] = useState(() => {
@@ -414,19 +436,71 @@ export default function Dashboard({ user }: { user: User }) {
     }
   };
 
+  const toggleBlockSlot = async (dateStr: string, timeStr: string) => {
+    if (!clinic) return;
+    const defaultBlockedTimes = ['06:00', '06:30', '07:00', '07:30', '08:00', '19:00', '19:30', '20:00', '20:30', '21:00'];
+    const isDefaultBlockedTime = defaultBlockedTimes.includes(timeStr);
+    
+    let updates: any = { updatedAt: serverTimestamp() };
+
+    if (isDefaultBlockedTime) {
+      const unblockedSlots = clinic.unblockedSlots || {};
+      const daySlots = unblockedSlots[dateStr] || [];
+      const isUnblocked = daySlots.includes(timeStr);
+      
+      const newDaySlots = isUnblocked
+        ? daySlots.filter((t: string) => t !== timeStr) // Block it
+        : [...daySlots, timeStr]; // Unblock it
+        
+      updates.unblockedSlots = {
+        ...unblockedSlots,
+        [dateStr]: newDaySlots
+      };
+    } else {
+      const blockedSlots = clinic.blockedSlots || {};
+      const daySlots = blockedSlots[dateStr] || [];
+      const isBlocked = daySlots.includes(timeStr);
+      
+      const newDaySlots = isBlocked
+        ? daySlots.filter((t: string) => t !== timeStr)
+        : [...daySlots, timeStr];
+
+      updates.blockedSlots = {
+        ...blockedSlots,
+        [dateStr]: newDaySlots
+      };
+    }
+
+    try {
+      await updateDoc(doc(db, 'clinics', user.uid), updates);
+      setSelectedAgendaSlot('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const toggleBlockDate = async (dateStr: string) => {
     if (!clinic) return;
-    const currentBlocked = clinic.blockedDays || [];
-    const isBlocked = currentBlocked.includes(dateStr);
-    const newBlocked = isBlocked 
-       ? currentBlocked.filter((d: string) => d !== dateStr) 
-       : [...currentBlocked, dateStr];
+    const isWeekend = new Date(dateStr + "T00:00:00").getDay() === 0 || new Date(dateStr + "T00:00:00").getDay() === 6;
+    
+    let updates: any = { updatedAt: serverTimestamp() };
+
+    if (isWeekend) {
+      const unblockedDays = clinic.unblockedDays || [];
+      const isUnblocked = unblockedDays.includes(dateStr);
+      updates.unblockedDays = isUnblocked 
+        ? unblockedDays.filter((d: string) => d !== dateStr) // block it
+        : [...unblockedDays, dateStr]; // unblock it
+    } else {
+      const currentBlocked = clinic.blockedDays || [];
+      const isBlocked = currentBlocked.includes(dateStr);
+      updates.blockedDays = isBlocked 
+         ? currentBlocked.filter((d: string) => d !== dateStr) 
+         : [...currentBlocked, dateStr];
+    }
     
     try {
-      await updateDoc(doc(db, 'clinics', user.uid), {
-        blockedDays: newBlocked,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(db, 'clinics', user.uid), updates);
     } catch (err) {
       console.error("Error toggling blocked date", err);
     }
@@ -669,7 +743,7 @@ export default function Dashboard({ user }: { user: User }) {
                         const dateStr = `${year}-${month}-${day}`;
                         const dayAppointments = appointments.filter(a => a.date === dateStr);
                         const isSelected = selectedDate === dateStr;
-                        const isBlocked = clinic?.blockedDays?.includes(dateStr) || false;
+                        const isBlocked = isDateBlocked(dateStr, clinic);
                         return (
                           <div 
                             key={i} 
@@ -690,13 +764,13 @@ export default function Dashboard({ user }: { user: User }) {
                     <div className="flex gap-2">
                       <button 
                         onClick={() => toggleBlockDate(selectedDate)}
-                        className={`text-xs py-1.5 px-3 rounded-lg font-bold transition-colors ${clinic?.blockedDays?.includes(selectedDate) ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                        className={`text-xs py-1.5 px-3 rounded-lg font-bold transition-colors ${isDateBlocked(selectedDate, clinic) ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                       >
-                        {clinic?.blockedDays?.includes(selectedDate) ? 'Desbloquear Día' : 'Bloquear Día'}
+                        {isDateBlocked(selectedDate, clinic) ? 'Desbloquear Día' : 'Bloquear Día'}
                       </button>
                       <button 
                         onClick={() => handleOpenApptModal()}
-                        disabled={clinic?.blockedDays?.includes(selectedDate)}
+                        disabled={isDateBlocked(selectedDate, clinic)}
                         className="text-xs bg-sky-100 text-sky-700 hover:bg-sky-200 py-1.5 px-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         + Nuevo
@@ -737,6 +811,37 @@ export default function Dashboard({ user }: { user: User }) {
                            <p className="text-sm text-slate-400 font-medium text-balance">No hay turnos agendados aún.</p>
                         </div>
                      )}
+
+                     <div className="mt-8 border-t border-slate-100 pt-6">
+                        <h4 className="text-sm font-bold text-slate-800 mb-4">Horarios del Día</h4>
+                        <div className="grid grid-cols-4 gap-2">
+                          {Array.from({ length: 31 }, (_, i) => `${String(Math.floor(i / 2) + 6).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`).map(time => {
+                            const isBooked = appointments.some(a => a.date === selectedDate && a.time === time);
+                            const isBlocked = isTimeSlotBlocked(selectedDate, time, clinic);
+                            const active = selectedAgendaSlot === time;
+                            return (
+                              <button
+                                key={time}
+                                onClick={() => setSelectedAgendaSlot(active ? '' : time)}
+                                className={`py-2 rounded-lg border text-[10px] sm:text-xs font-semibold transition-all ${isBooked ? 'bg-sky-500 text-white border-transparent cursor-not-allowed' : isBlocked ? 'bg-slate-100 text-slate-400 border-transparent line-through' : active ? 'bg-indigo-50 border-indigo-500 text-indigo-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                disabled={isBooked}
+                              >
+                                {time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selectedAgendaSlot && (
+                          <div className="mt-4 flex justify-end">
+                            <button
+                              onClick={() => toggleBlockSlot(selectedDate, selectedAgendaSlot)}
+                              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-all shadow-md"
+                            >
+                              {isTimeSlotBlocked(selectedDate, selectedAgendaSlot, clinic) ? 'Desbloquear Horario' : 'Bloquear Horario'}
+                            </button>
+                          </div>
+                        )}
+                     </div>
                   </div>
                </div>
             </div>

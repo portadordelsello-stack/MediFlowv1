@@ -4,6 +4,25 @@ import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp
 import { db } from '../firebase';
 import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
+const isDateBlocked = (dateStr: string, clinicObj: any) => {
+  if (!dateStr || !clinicObj) return false;
+  const isWeekend = new Date(dateStr + "T00:00:00").getDay() === 0 || new Date(dateStr + "T00:00:00").getDay() === 6;
+  if (isWeekend) {
+    return !clinicObj.unblockedDays?.includes(dateStr);
+  }
+  return clinicObj.blockedDays?.includes(dateStr) || false;
+};
+
+const isTimeSlotBlocked = (dateStr: string, timeStr: string, clinicObj: any) => {
+  if (!clinicObj || !timeStr) return false;
+  const defaultBlockedTimes = ['06:00', '06:30', '07:00', '07:30', '08:00', '19:00', '19:30', '20:00', '20:30', '21:00'];
+  const isDefaultBlockedTime = defaultBlockedTimes.includes(timeStr);
+  if (isDefaultBlockedTime) {
+    return !clinicObj.unblockedSlots?.[dateStr]?.includes(timeStr);
+  }
+  return clinicObj.blockedSlots?.[dateStr]?.includes(timeStr) || false;
+};
+
 export default function BookingPortal() {
   const { clinicId } = useParams<{ clinicId: string }>();
   const [clinic, setClinic] = useState<any>(null);
@@ -316,7 +335,7 @@ export default function BookingPortal() {
                           const todayStr = `${yStr}-${mStr}-${dStr}`;
                           
                           const isPast = dateStr < todayStr;
-                          const isBlocked = clinic?.blockedDays?.includes(dateStr) || isPast;
+                          const isBlocked = isDateBlocked(dateStr, clinic) || isPast;
                           const active = selectedDate === dateStr;
                           
                           return (
@@ -338,8 +357,9 @@ export default function BookingPortal() {
                     <div className="animate-fade-in">
                       <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Horarios Disponibles</label>
                       <div className="grid grid-cols-3 gap-2">
-                        {['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'].map(time => {
-                          const isOccupied = occupiedSlots.includes(time);
+                        {Array.from({ length: 31 }, (_, i) => `${String(Math.floor(i / 2) + 6).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`).map(time => {
+                          const isBlockedSlot = isTimeSlotBlocked(selectedDate, time, clinic);
+                          const isOccupied = occupiedSlots.includes(time) || isBlockedSlot;
                           const active = selectedTime === time;
                           return (
                             <button 
