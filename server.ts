@@ -281,7 +281,11 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   const patientData = patientSnap.docs[0].data();
                   const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
                   // Consultar turnos futuros
-                  const todayStr = new Date().toISOString().split('T')[0];
+                  const d = new Date();
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const todayStr = `${year}-${month}-${day}`;
                   const apptSnap = await appointmentsRef
                     .where('patientId', '==', patientId)
                     .where('date', '>=', todayStr)
