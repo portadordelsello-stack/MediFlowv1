@@ -752,7 +752,7 @@ export default function Dashboard({ user }: { user: User }) {
                           <div 
                             key={i} 
                             onClick={() => setSelectedDate(dateStr)}
-                            className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${isSelected ? 'border-sky-500 ring-2 ring-sky-500 bg-sky-50 text-sky-700 font-bold' : isBlocked ? 'border-transparent bg-slate-100 text-slate-400 line-through' : dayAppointments.length > 0 ? 'bg-slate-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
+                            className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${isSelected && isBlocked ? 'border-slate-400 ring-2 ring-slate-400 bg-slate-100 text-slate-500 font-bold' : isSelected ? 'border-sky-500 ring-2 ring-sky-500 bg-sky-50 text-sky-700 font-bold' : isBlocked ? 'border-transparent bg-slate-100 text-slate-400 line-through' : dayAppointments.length > 0 ? 'bg-slate-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
                           >
                              <span className="text-sm">{i + 1}</span>
                              {dayAppointments.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
