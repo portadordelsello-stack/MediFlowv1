@@ -2114,15 +2114,15 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
       {/* Upgrade Modal */}
       {showUpgradeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl animate-scale-in">
-            <div className="p-8 text-center relative overflow-hidden bg-gradient-to-br from-indigo-500 to-sky-600 border-b border-white/10">
+          <div className="bg-white rounded-3xl md:rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl animate-scale-in max-h-[90vh] flex flex-col">
+            <div className="p-6 md:p-8 text-center relative overflow-hidden bg-gradient-to-br from-indigo-500 to-sky-600 border-b border-white/10 shrink-0">
                <div className="relative z-10">
-                 <h2 className="text-3xl font-bold text-white mb-2">Mejora tu Suscripción</h2>
-                 <p className="text-indigo-100 text-sm">Desbloquea el poder total de Turnely AI con Mercado Pago 🔒 Checkout Pro</p>
+                 <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">Mejora tu Suscripción</h2>
+                 <p className="text-indigo-100 text-xs md:text-sm">Desbloquea el poder total de Turnely AI con Mercado Pago 🔒 Checkout Pro</p>
                </div>
             </div>
             
-            <div className="p-8 grid md:grid-cols-2 gap-6 bg-slate-50">
+            <div className="p-6 md:p-8 grid md:grid-cols-2 gap-6 bg-slate-50 overflow-y-auto">
               <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-sky-300 transition-colors shadow-sm relative flex flex-col">
                  <div className="inline-block px-3 py-1 bg-sky-100 text-sky-800 text-[10px] font-bold tracking-widest uppercase rounded-full mb-4 w-max">
                    Básico
@@ -2168,7 +2168,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
               </div>
             </div>
 
-            <div className="p-4 bg-white border-t border-slate-100 flex justify-center">
+            <div className="p-4 bg-white border-t border-slate-100 flex justify-center shrink-0">
               <button
                 onClick={() => setShowUpgradeModal(false)}
                 className="px-6 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
