@@ -70,6 +70,34 @@ export default function Dashboard({ user }: { user: User }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Appt state
+  const [apptForm, setApptForm] = useState<any>(null);
+  const [apptToDelete, setApptToDelete] = useState<string | null>(null);
+  const [savingAppt, setSavingAppt] = useState(false);
+  
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+  
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  });
+
+  const handlePrevMonth = () => {
+    setCurrentMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonthDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+  
+  const daysInMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1).getDay();
+
   useEffect(() => {
     if (isAdmin && activeTab === 'admin') {
       const unsubscribe = onSnapshot(collection(db, 'clinics'), (snapshot) => {
@@ -91,6 +119,69 @@ export default function Dashboard({ user }: { user: User }) {
     } catch (error) {
       console.error("Error updating clinic plan:", error);
     }
+  };
+
+  const handleOpenApptModal = (appt?: any) => {
+    if (appt) {
+       setApptForm({
+          id: appt.id,
+          patientId: appt.patientId,
+          date: appt.date,
+          time: appt.time,
+          status: appt.status
+       });
+    } else {
+       setApptForm({
+          patientId: patients.length > 0 ? patients[0].id : '',
+          date: selectedDate,
+          time: '',
+          status: 'SCHEDULED'
+       });
+    }
+  };
+
+  const handleSaveAppt = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if (!apptForm) return;
+     setSavingAppt(true);
+     try {
+       if (apptForm.id) {
+           await updateDoc(doc(db, 'clinics', user.uid, 'appointments', apptForm.id), {
+               date: apptForm.date,
+               time: apptForm.time,
+               status: apptForm.status,
+               updatedAt: serverTimestamp()
+           });
+       } else {
+           const patient = patients.find(p => p.id === apptForm.patientId);
+           if (!patient) { alert("Seleccione un paciente valido"); setSavingAppt(false); return; }
+           await addDoc(collection(db, 'clinics', user.uid, 'appointments'), {
+               clinicOwnerId: user.uid,
+               patientId: patient.id,
+               patientDni: patient.dni,
+               date: apptForm.date,
+               time: apptForm.time,
+               status: apptForm.status,
+               createdAt: serverTimestamp(),
+               updatedAt: serverTimestamp()
+           });
+       }
+       setApptForm(null);
+     } catch(err) {
+       console.error("Error saving appointment:", err);
+       alert("Error guardando el turno.");
+     }
+     setSavingAppt(false);
+  };
+
+  const deleteAppointment = async () => {
+      if(!apptToDelete) return;
+      try {
+         await deleteDoc(doc(db, 'clinics', user.uid, 'appointments', apptToDelete));
+         setApptToDelete(null);
+      } catch(e) {
+         console.error("Error deleting appointment:", e);
+      }
   };
 
   const confirmDeleteClinic = async () => {
@@ -390,7 +481,14 @@ export default function Dashboard({ user }: { user: User }) {
                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                       <Calendar className="w-5 h-5 text-sky-600"/> Calendario de Turnos
+                       <Calendar className="w-5 h-5 text-sky-600"/> 
+                       <div className="flex items-center ml-2 border rounded-lg bg-slate-50 overflow-hidden text-sm">
+                          <button onClick={handlePrevMonth} className="px-3 py-1.5 hover:bg-slate-200 text-slate-600 font-bold transition-colors">&lt;</button>
+                          <span className="px-3 font-semibold capitalize min-w-[120px] text-center">
+                            {currentMonthDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+                          </span>
+                          <button onClick={handleNextMonth} className="px-3 py-1.5 hover:bg-slate-200 text-slate-600 font-bold transition-colors">&gt;</button>
+                       </div>
                     </h3>
                     <div className="flex gap-2">
                       <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
@@ -404,12 +502,22 @@ export default function Dashboard({ user }: { user: User }) {
                      <div>Dom</div><div>Lun</div><div>Mar</div><div>Mié</div><div>Jue</div><div>Vie</div><div>Sáb</div>
                   </div>
                   <div className="grid grid-cols-7 gap-2 text-center">
-                     {Array.from({length: 31}).map((_, i) => {
-                        const dateStr = `2026-05-${String(i + 1).padStart(2, '0')}`;
+                     {Array.from({length: firstDayOfMonth}).map((_, i) => (
+                         <div key={`empty-${i}`} className="p-3"></div>
+                     ))}
+                     {Array.from({length: daysInMonth}).map((_, i) => {
+                        const year = currentMonthDate.getFullYear();
+                        const month = String(currentMonthDate.getMonth() + 1).padStart(2, '0');
+                        const day = String(i + 1).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`;
                         const dayAppointments = appointments.filter(a => a.date === dateStr);
-                        const isToday = i + 1 === 3; // Hardcoded for demo/today
+                        const isSelected = selectedDate === dateStr;
                         return (
-                          <div key={i} className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${dayAppointments.length > 0 ? 'bg-sky-50 border-sky-200 text-sky-700 font-bold' : isToday ? 'border-sky-500 ring-1 ring-sky-500 bg-white' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}>
+                          <div 
+                            key={i} 
+                            onClick={() => setSelectedDate(dateStr)}
+                            className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${isSelected ? 'border-sky-500 ring-2 ring-sky-500 bg-sky-50 text-sky-700 font-bold' : dayAppointments.length > 0 ? 'bg-slate-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
+                          >
                              <span className="text-sm">{i + 1}</span>
                              {dayAppointments.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
                           </div>
@@ -419,9 +527,17 @@ export default function Dashboard({ user }: { user: User }) {
                </div>
                
                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Próximos Turnos</h3>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedDate}</h3>
+                    <button 
+                      onClick={() => handleOpenApptModal()}
+                      className="text-xs bg-sky-100 text-sky-700 hover:bg-sky-200 py-1.5 px-3 rounded-lg font-bold transition-colors"
+                    >
+                      + Nuevo
+                    </button>
+                  </div>
                   <div className="space-y-4 flex-1 overflow-y-auto max-h-[500px] pr-2">
-                     {appointments.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10).map((app) => {
+                     {appointments.filter(a => a.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)).map((app) => {
                         const patient = patients.find(p => p.id === app.patientId);
                         return (
                           <div key={app.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
@@ -431,8 +547,20 @@ export default function Dashboard({ user }: { user: User }) {
                                   {app.status}
                                 </span>
                              </div>
-                             <p className="font-semibold text-slate-800">{patient?.name || 'Paciente Desconocido'}</p>
-                             <p className="text-sm text-slate-500">DNI: {app.patientDni}</p>
+                             <div className="flex items-center justify-between mt-2">
+                               <div>
+                                 <p className="font-semibold text-slate-800">{patient?.name || 'Paciente Desconocido'}</p>
+                                 <p className="text-sm text-slate-500">DNI: {app.patientDni}</p>
+                               </div>
+                               <div className="flex gap-2">
+                                 <button onClick={() => handleOpenApptModal(app)} className="text-slate-400 hover:text-indigo-600">
+                                   <Settings className="w-4 h-4" />
+                                 </button>
+                                 <button onClick={() => setApptToDelete(app.id)} className="text-slate-400 hover:text-red-600">
+                                   <X className="w-4 h-4" />
+                                 </button>
+                               </div>
+                             </div>
                           </div>
                         );
                      })}
@@ -444,6 +572,122 @@ export default function Dashboard({ user }: { user: User }) {
                      )}
                   </div>
                </div>
+            </div>
+          )}
+
+          {/* Appointment Modal */}
+          {activeTab === 'agenda' && apptToDelete && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
+                  <h4 className="text-lg font-bold text-slate-900">Eliminar Turno</h4>
+                  <button type="button" onClick={() => setApptToDelete(null)} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <div className="p-8">
+                  <p className="text-slate-600 text-center">¿Estás seguro que deseas eliminar este turno?</p>
+                </div>
+                <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setApptToDelete(null)}
+                    className="flex-1 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={deleteAppointment}
+                    className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-md shadow-red-100"
+                  >
+                    Sí, eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'agenda' && apptForm && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-200">
+                <form onSubmit={handleSaveAppt}>
+                  <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0">
+                    <h4 className="text-lg font-bold text-slate-900">{apptForm.id ? 'Editar Turno' : 'Nuevo Turno'}</h4>
+                    <button type="button" onClick={() => setApptForm(null)} className="text-slate-400 hover:text-slate-600">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+                  <div className="p-8 space-y-5">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Paciente</label>
+                      <select 
+                        required
+                        disabled={!!apptForm.id}
+                        value={apptForm.patientId}
+                        onChange={e => setApptForm({...apptForm, patientId: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:opacity-50"
+                      >
+                        {patients.map(p => (
+                           <option key={p.id} value={p.id}>{p.name || 'Sin Nombre'} - {p.dni || p.phone}</option>
+                        ))}
+                      </select>
+                      {patients.length === 0 && <p className="text-xs mt-1 text-red-500">Debe tener al menos un paciente registrado.</p>}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Fecha</label>
+                        <input 
+                          type="date"
+                          required
+                          value={apptForm.date}
+                          onChange={e => setApptForm({...apptForm, date: e.target.value})}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1.5">Hora</label>
+                        <input 
+                          type="time" 
+                          required
+                          value={apptForm.time}
+                          onChange={e => setApptForm({...apptForm, time: e.target.value})}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Estado</label>
+                      <select
+                        value={apptForm.status}
+                        onChange={e => setApptForm({...apptForm, status: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm bg-white"
+                      >
+                        <option value="SCHEDULED">AGENDADO</option>
+                        <option value="CONFIRMED">CONFIRMADO</option>
+                        <option value="CANCELLED">CANCELADO</option>
+                        <option value="COMPLETED">COMPLETADO</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setApptForm(null)}
+                      className="flex-1 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={savingAppt || patients.length === 0}
+                      className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-md shadow-indigo-100 disabled:opacity-50"
+                    >
+                      {savingAppt ? 'Guardando...' : 'Guardar Turno'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
 
