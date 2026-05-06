@@ -59,6 +59,7 @@ export default function Dashboard({ user }: { user: User }) {
     { role: 'bot', text: '¡Hola! Soy el asistente virtual de la clínica. ¿En qué te puedo ayudar?' }
   ]);
   const [simulatorInput, setSimulatorInput] = useState('');
+  const [isSimulatorGenerating, setIsSimulatorGenerating] = useState(false);
   const simulatorEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -663,8 +664,8 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   const messagesUsed = clinic?.messagesUsed || 0;
   const isLimitReached = messagesUsed >= planLimit;
 
-  const handleSimulatorSend = () => {
-    if (!simulatorInput.trim()) return;
+  const handleSimulatorSend = async () => {
+    if (!simulatorInput.trim() || isSimulatorGenerating) return;
 
     if (currentPlan !== 'PREMIUM') {
        handleUpgrade();
@@ -674,11 +675,35 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
     const userMsg = simulatorInput.trim();
     setSimulatorMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setSimulatorInput('');
+    setIsSimulatorGenerating(true);
 
-    // Simulate answering
-    setTimeout(() => {
-       setSimulatorMessages(prev => [...prev, { role: 'bot', text: 'Esta es una respuesta de prueba del simulador. (Para probar IA real conectada, es necesario backend)' }]);
-    }, 1000);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const historyMsg = simulatorMessages.map(m => ({
+        role: m.role === 'bot' ? 'model' : 'user',
+        parts: [{ text: m.text }]
+      }));
+      historyMsg.push({ role: 'user', parts: [{ text: userMsg }] });
+
+      const defaultPrompt = 'Eres un asistente virtual amable y servicial para responder consultas médicas y agendar pacientes.';
+      
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: historyMsg,
+        config: {
+          systemInstruction: systemPrompt || clinic?.systemPrompt || defaultPrompt,
+          temperature: 0.5
+        }
+      });
+
+      setSimulatorMessages(prev => [...prev, { role: 'bot', text: response.text || 'Ocurrió un problema, inténtalo de nuevo.' }]);
+    } catch (error) {
+      console.error(error);
+      setSimulatorMessages(prev => [...prev, { role: 'bot', text: 'Error al conectar con la IA del simulador. Intenta más tarde.' }]);
+    } finally {
+      setIsSimulatorGenerating(false);
+    }
   };
 
   return (
@@ -1367,6 +1392,15 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                           </div>
                        </div>
                     ))}
+                    {isSimulatorGenerating && (
+                       <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2">
+                          <div className="max-w-[80%] rounded-lg px-4 py-3 shadow-sm bg-white text-slate-800 rounded-tl-none flex space-x-2 items-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                          </div>
+                       </div>
+                    )}
                     <div ref={simulatorEndRef}></div>
                  </div>
 
@@ -1378,8 +1412,9 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                          onChange={e => setSimulatorInput(e.target.value)}
                          placeholder={currentPlan !== 'PREMIUM' ? 'Presiona enviar para mejorar...' : 'Escribe un mensaje...'}
                          className="flex-1 px-4 py-2 bg-transparent border-none focus:outline-none focus:ring-0 text-sm"
+                         disabled={isSimulatorGenerating}
                        />
-                       <button type="submit" disabled={!simulatorInput.trim()} className="w-10 h-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white hover:bg-[#075e54] transition-colors shrink-0 disabled:opacity-50 disabled:bg-slate-300">
+                       <button type="submit" disabled={!simulatorInput.trim() || isSimulatorGenerating} className="w-10 h-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white hover:bg-[#075e54] transition-colors shrink-0 disabled:opacity-50 disabled:bg-slate-300">
                           <Send className="w-4 h-4 ml-0.5" />
                        </button>
                     </form>
