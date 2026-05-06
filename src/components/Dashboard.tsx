@@ -104,6 +104,7 @@ export default function Dashboard({ user }: { user: User }) {
 
   // Appt state
   const [apptForm, setApptForm] = useState<any>(null);
+  const [searchDni, setSearchDni] = useState('');
   const [apptToDelete, setApptToDelete] = useState<string | null>(null);
   const [selectedAgendaSlot, setSelectedAgendaSlot] = useState<string>('');
   const [savingAppt, setSavingAppt] = useState(false);
@@ -156,6 +157,8 @@ export default function Dashboard({ user }: { user: User }) {
 
   const handleOpenApptModal = (appt?: any) => {
     if (appt) {
+       const p = patients.find((p: any) => p.id === appt.patientId);
+       setSearchDni(p ? (p.dni || '') : '');
        setApptForm({
           id: appt.id,
           patientId: appt.patientId,
@@ -164,8 +167,9 @@ export default function Dashboard({ user }: { user: User }) {
           status: appt.status
        });
     } else {
+       setSearchDni('');
        setApptForm({
-          patientId: patients.length > 0 ? patients[0].id : '',
+          patientId: '',
           date: selectedDate,
           time: '',
           status: 'SCHEDULED'
@@ -892,18 +896,31 @@ export default function Dashboard({ user }: { user: User }) {
                   </div>
                   <div className="p-8 space-y-5">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Paciente</label>
-                      <select 
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">DNI del Paciente</label>
+                      <input 
+                        type="text"
                         required
                         disabled={!!apptForm.id}
-                        value={apptForm.patientId}
-                        onChange={e => setApptForm({...apptForm, patientId: e.target.value})}
+                        placeholder="Ingrese DNI..."
+                        value={searchDni}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSearchDni(val);
+                          const found = patients.find(p => p.dni === val);
+                          setApptForm({...apptForm, patientId: found ? found.id : ''});
+                        }}
                         className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:opacity-50"
-                      >
-                        {patients.map(p => (
-                           <option key={p.id} value={p.id}>{p.name || 'Sin Nombre'} - {p.dni || p.phone}</option>
-                        ))}
-                      </select>
+                      />
+                      {apptForm.patientId && patients.find(p => p.id === apptForm.patientId) && (
+                        <p className="text-xs mt-1 text-green-600 font-semibold">
+                          Paciente encontrado: {patients.find(p => p.id === apptForm.patientId)?.name}
+                        </p>
+                      )}
+                      {!apptForm.patientId && searchDni.length > 5 && (
+                        <p className="text-xs mt-1 text-red-500 font-semibold">
+                          No se encontró paciente con este DNI.
+                        </p>
+                      )}
                       {patients.length === 0 && <p className="text-xs mt-1 text-red-500">Debe tener al menos un paciente registrado.</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
