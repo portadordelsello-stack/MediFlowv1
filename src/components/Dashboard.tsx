@@ -196,14 +196,18 @@ export default function Dashboard({ user }: { user: User }) {
           name: patient.name || '',
           dni: patient.dni || '',
           phone: patient.phone || '',
-          email: patient.email || ''
+          email: patient.email || '',
+          address: patient.address || '',
+          healthInsurance: patient.healthInsurance || ''
        });
     } else {
        setPatientForm({
           name: '',
           dni: '',
           phone: '',
-          email: ''
+          email: '',
+          address: '',
+          healthInsurance: ''
        });
     }
   };
@@ -215,27 +219,31 @@ export default function Dashboard({ user }: { user: User }) {
      try {
        if (patientForm.id) {
            await updateDoc(doc(db, 'clinics', user.uid, 'patients', patientForm.id), {
-               name: patientForm.name,
-               dni: patientForm.dni,
-               phone: patientForm.phone,
-               email: patientForm.email,
+               name: patientForm.name || '',
+               dni: patientForm.dni || '',
+               phone: patientForm.phone || '',
+               email: patientForm.email || '',
+               address: patientForm.address || '',
+               healthInsurance: patientForm.healthInsurance || '',
                updatedAt: serverTimestamp()
            });
        } else {
            await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
                clinicOwnerId: user.uid,
-               name: patientForm.name,
-               dni: patientForm.dni,
-               phone: patientForm.phone,
-               email: patientForm.email,
+               name: patientForm.name || '',
+               dni: patientForm.dni || '',
+               phone: patientForm.phone || '',
+               email: patientForm.email || '',
+               address: patientForm.address || '',
+               healthInsurance: patientForm.healthInsurance || '',
                createdAt: serverTimestamp(),
                updatedAt: serverTimestamp()
            });
        }
        setPatientForm(null);
-     } catch(err) {
+     } catch(err: any) {
        console.error("Error saving patient:", err);
-       alert("Error guardando el paciente.");
+       alert("Error guardando el paciente: " + err.message);
      }
      setSavingPatient(false);
   };
@@ -786,6 +794,7 @@ export default function Dashboard({ user }: { user: User }) {
                               <th className="px-6 py-4 border-b border-slate-100">DNI</th>
                               <th className="px-6 py-4 border-b border-slate-100">WhatsApp</th>
                               <th className="px-6 py-4 border-b border-slate-100">Email</th>
+                              <th className="px-6 py-4 border-b border-slate-100">Obra Social</th>
                               <th className="px-6 py-4 border-b border-slate-100">Acciones</th>
                            </tr>
                         </thead>
@@ -803,6 +812,7 @@ export default function Dashboard({ user }: { user: User }) {
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.dni}</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.phone}</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.email || '-'}</td>
+                                 <td className="px-6 py-4 text-sm text-slate-600">{p.healthInsurance || '-'}</td>
                                  <td className="px-6 py-4 flex items-center gap-3">
                                     <button onClick={() => handleOpenPatientModal(p)} className="text-slate-400 hover:text-indigo-600" title="Editar">
                                       <Settings className="w-4 h-4" />
@@ -878,6 +888,24 @@ export default function Dashboard({ user }: { user: User }) {
                         type="email"
                         value={patientForm.email}
                         onChange={e => setPatientForm({...patientForm, email: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Dirección</label>
+                      <input 
+                        type="text"
+                        value={patientForm.address}
+                        onChange={e => setPatientForm({...patientForm, address: e.target.value})}
+                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Obra Social</label>
+                      <input 
+                        type="text"
+                        value={patientForm.healthInsurance}
+                        onChange={e => setPatientForm({...patientForm, healthInsurance: e.target.value})}
                         className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                       />
                     </div>

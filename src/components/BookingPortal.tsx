@@ -65,6 +65,8 @@ export default function BookingPortal() {
         name: formData.name,
         phone: formData.phone,
         email: formData.email,
+        address: '',
+        healthInsurance: '',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });

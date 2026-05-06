@@ -31,14 +31,16 @@ service cloud.firestore {
 
     function isValidPatient(data) {
       return data.keys().hasAll(['clinicOwnerId', 'phone', 'dni', 'createdAt', 'updatedAt']) &&
-             data.keys().size() >= 5 && data.keys().size() <= 7 &&
+             data.keys().size() >= 5 && data.keys().size() <= 15 &&
              data.clinicOwnerId is string && data.clinicOwnerId.size() <= 128 && (data.clinicOwnerId == request.auth.uid || !isSignedIn()) &&
              data.phone is string && data.phone.size() <= 20 &&
              data.dni is string && data.dni.size() <= 20 &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
              (!('name' in data) || (data.name is string && data.name.size() <= 100)) &&
-             (!('email' in data) || (data.email is string && data.email.size() <= 100));
+             (!('email' in data) || (data.email is string && data.email.size() <= 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 200)) &&
+             (!('healthInsurance' in data) || (data.healthInsurance is string && data.healthInsurance.size() <= 100));
     }
 
     function isValidAppointment(data) {
@@ -99,7 +101,7 @@ service cloud.firestore {
                           incoming().clinicOwnerId == existing().clinicOwnerId &&
                           incoming().createdAt == existing().createdAt &&
                            incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'email', 'dni']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'email', 'dni', 'address', 'healthInsurance']);
                           
          allow delete: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
       }
