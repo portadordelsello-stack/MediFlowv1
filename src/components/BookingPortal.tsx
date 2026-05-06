@@ -15,7 +15,7 @@ export default function BookingPortal() {
   const [error, setError] = useState('');
 
   // Form for registration
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
+  const [formData, setFormData] = useState({ name: '', phone: '', email: '', address: '', healthInsurance: '' });
 
   // Slot selection
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -65,8 +65,8 @@ export default function BookingPortal() {
         name: formData.name,
         phone: formData.phone,
         email: formData.email,
-        address: '',
-        healthInsurance: '',
+        address: formData.address,
+        healthInsurance: formData.healthInsurance,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -206,6 +206,26 @@ export default function BookingPortal() {
                       value={formData.email}
                       onChange={e => setFormData({...formData, email: e.target.value})}
                       placeholder="ejemplo@correo.com"
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Obra Social (Opcional)</label>
+                    <input 
+                      type="text" 
+                      value={formData.healthInsurance}
+                      onChange={e => setFormData({...formData, healthInsurance: e.target.value})}
+                      placeholder="Ej. OSDE"
+                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Dirección (Opcional)</label>
+                    <input 
+                      type="text" 
+                      value={formData.address}
+                      onChange={e => setFormData({...formData, address: e.target.value})}
+                      placeholder="Ej. Calle 123"
                       className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium"
                     />
                   </div>
