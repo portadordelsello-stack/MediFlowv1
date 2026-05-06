@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer, limit } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function BookingPortal() {
   const { clinicId } = useParams<{ clinicId: string }>();
@@ -21,6 +21,28 @@ export default function BookingPortal() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [occupiedSlots, setOccupiedSlots] = useState<any[]>([]);
+
+  const [currentMonthDate, setCurrentMonthDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
+
+  const handlePrevMonth = () => {
+    setCurrentMonthDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() - 1);
+      return d;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setCurrentMonthDate(prev => {
+      const d = new Date(prev);
+      d.setMonth(d.getMonth() + 1);
+      return d;
+    });
+  };
 
   useEffect(() => {
     if (clinicId) {
@@ -259,30 +281,56 @@ export default function BookingPortal() {
 
                 <div className="space-y-6">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Seleccione una Fecha</label>
-                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
-                      {[0, 1, 2, 3, 4, 5, 6].map(i => {
-                        const date = new Date();
-                        date.setDate(date.getDate() + i + 1);
-                        const year = date.getFullYear();
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const dateStr = `${year}-${month}-${day}`;
-                        const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
-                        const isBlocked = clinic?.blockedDays?.includes(dateStr);
-                        const active = selectedDate === dateStr;
-                        return (
-                          <button 
-                            key={i}
-                            onClick={() => !isBlocked && setSelectedDate(dateStr)}
-                            disabled={isBlocked}
-                            className={`flex flex-col items-center justify-center min-w-[70px] h-20 rounded-2xl border transition-all ${isBlocked ? 'bg-slate-100 border-slate-200 text-slate-300 line-through opacity-50 cursor-not-allowed' : active ? 'bg-sky-600 border-sky-600 text-white font-bold shadow-lg shadow-sky-200' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'}`}
-                          >
-                            <span className="text-[10px] uppercase font-bold opacity-80">{dayName}</span>
-                            <span className="text-xl">{date.getDate()}</span>
-                          </button>
-                        );
-                      })}
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-bold text-slate-900 capitalize">
+                          {currentMonthDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                        </h3>
+                        <div className="flex gap-2">
+                           <button onClick={handlePrevMonth} className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors">
+                             <ChevronLeft className="w-4 h-4"/>
+                           </button>
+                           <button onClick={handleNextMonth} className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors">
+                             <ChevronRight className="w-4 h-4"/>
+                           </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-1 md:gap-2">
+                        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(d => (
+                           <div key={d} className="text-center text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider py-1">{d}</div>
+                        ))}
+                        {Array.from({ length: currentMonthDate.getDay() }).map((_, i) => (
+                           <div key={`empty-${i}`} className="p-2"></div>
+                        ))}
+                        {Array.from({ length: new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 0).getDate() }).map((_, i) => {
+                          const year = currentMonthDate.getFullYear();
+                          const month = String(currentMonthDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(i + 1).padStart(2, '0');
+                          const dateStr = `${year}-${month}-${day}`;
+                          
+                          const today = new Date();
+                          const yStr = today.getFullYear();
+                          const mStr = String(today.getMonth() + 1).padStart(2, '0');
+                          const dStr = String(today.getDate()).padStart(2, '0');
+                          const todayStr = `${yStr}-${mStr}-${dStr}`;
+                          
+                          const isPast = dateStr < todayStr;
+                          const isBlocked = clinic?.blockedDays?.includes(dateStr) || isPast;
+                          const active = selectedDate === dateStr;
+                          
+                          return (
+                            <button 
+                              key={i}
+                              onClick={() => !isBlocked && setSelectedDate(dateStr)}
+                              disabled={isBlocked}
+                              className={`flex flex-col items-center justify-center w-full aspect-square rounded-xl border transition-all ${isBlocked ? 'bg-slate-50 opacity-50 border-transparent text-slate-400 line-through cursor-not-allowed' : active ? 'bg-sky-600 border-sky-600 text-white font-bold shadow-lg shadow-sky-200' : 'bg-white border-slate-100 text-slate-600 hover:bg-sky-50 font-medium'}`}
+                            >
+                              <span className="text-sm">{i + 1}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
 
