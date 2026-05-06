@@ -406,6 +406,24 @@ export default function Dashboard({ user }: { user: User }) {
     }
   };
 
+  const toggleBlockDate = async (dateStr: string) => {
+    if (!clinic) return;
+    const currentBlocked = clinic.blockedDays || [];
+    const isBlocked = currentBlocked.includes(dateStr);
+    const newBlocked = isBlocked 
+       ? currentBlocked.filter((d: string) => d !== dateStr) 
+       : [...currentBlocked, dateStr];
+    
+    try {
+      await updateDoc(doc(db, 'clinics', user.uid), {
+        blockedDays: newBlocked,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Error toggling blocked date", err);
+    }
+  };
+
   const toggleBotActive = async () => {
     if (!clinic) return;
     if (!clinic.botActive && isLimitReached) return;
@@ -566,6 +584,9 @@ export default function Dashboard({ user }: { user: User }) {
                     </h3>
                     <div className="flex gap-2">
                       <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+                        <span className="w-2 h-2 rounded-full bg-slate-300"></span> Bloqueado
+                      </span>
+                      <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
                         <span className="w-2 h-2 rounded-full bg-sky-500"></span> Ocupado
                       </span>
                     </div>
@@ -586,11 +607,12 @@ export default function Dashboard({ user }: { user: User }) {
                         const dateStr = `${year}-${month}-${day}`;
                         const dayAppointments = appointments.filter(a => a.date === dateStr);
                         const isSelected = selectedDate === dateStr;
+                        const isBlocked = clinic?.blockedDays?.includes(dateStr) || false;
                         return (
                           <div 
                             key={i} 
                             onClick={() => setSelectedDate(dateStr)}
-                            className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${isSelected ? 'border-sky-500 ring-2 ring-sky-500 bg-sky-50 text-sky-700 font-bold' : dayAppointments.length > 0 ? 'bg-slate-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
+                            className={`p-3 rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-colors ${isSelected ? 'border-sky-500 ring-2 ring-sky-500 bg-sky-50 text-sky-700 font-bold' : isBlocked ? 'border-transparent bg-slate-100 text-slate-400 line-through' : dayAppointments.length > 0 ? 'bg-slate-50 border-sky-200 text-sky-700 font-bold' : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50'}`}
                           >
                              <span className="text-sm">{i + 1}</span>
                              {dayAppointments.length > 0 && <div className="w-1.5 h-1.5 rounded-full bg-sky-500 mt-1"></div>}
@@ -603,12 +625,21 @@ export default function Dashboard({ user }: { user: User }) {
                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedDate}</h3>
-                    <button 
-                      onClick={() => handleOpenApptModal()}
-                      className="text-xs bg-sky-100 text-sky-700 hover:bg-sky-200 py-1.5 px-3 rounded-lg font-bold transition-colors"
-                    >
-                      + Nuevo
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => toggleBlockDate(selectedDate)}
+                        className={`text-xs py-1.5 px-3 rounded-lg font-bold transition-colors ${clinic?.blockedDays?.includes(selectedDate) ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                      >
+                        {clinic?.blockedDays?.includes(selectedDate) ? 'Desbloquear Día' : 'Bloquear Día'}
+                      </button>
+                      <button 
+                        onClick={() => handleOpenApptModal()}
+                        disabled={clinic?.blockedDays?.includes(selectedDate)}
+                        className="text-xs bg-sky-100 text-sky-700 hover:bg-sky-200 py-1.5 px-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        + Nuevo
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-4 flex-1 overflow-y-auto max-h-[500px] pr-2">
                      {appointments.filter(a => a.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)).map((app) => {

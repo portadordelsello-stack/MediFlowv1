@@ -26,7 +26,8 @@ service cloud.firestore {
              data.whatsappSessionStatus in ['DISCONNECTED', 'CONNECTED', 'QR_READY'] &&
              (!('systemPrompt' in data) || (data.systemPrompt is string && data.systemPrompt.size() <= 5000)) &&
              (!('messagesUsed' in data) || data.messagesUsed is number) &&
-             (!('whatsappNumber' in data) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 20));
+             (!('whatsappNumber' in data) || (data.whatsappNumber is string && data.whatsappNumber.size() <= 20)) &&
+             (!('blockedDays' in data) || data.blockedDays is list);
     }
 
     function isValidPatient(data) {
@@ -82,7 +83,7 @@ service cloud.firestore {
                        incoming().createdAt == existing().createdAt &&
                        incoming().updatedAt == request.time &&
                        (
-                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'whatsappSessionStatus', 'systemPrompt', 'messagesUsed', 'whatsappNumber'])) || isAdmin()
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'name', 'specialty', 'plan', 'trialEndsAt', 'botActive', 'whatsappSessionStatus', 'systemPrompt', 'messagesUsed', 'whatsappNumber', 'blockedDays'])) || isAdmin()
                        );
                        
       allow delete: if isSignedIn() && isValidId(clinicId) && (clinicId == request.auth.uid || isAdmin());

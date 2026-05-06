@@ -262,12 +262,14 @@ export default function BookingPortal() {
                         date.setDate(date.getDate() + i + 1);
                         const dateStr = date.toISOString().split('T')[0];
                         const dayName = date.toLocaleDateString('es-ES', { weekday: 'short' });
+                        const isBlocked = clinic?.blockedDays?.includes(dateStr);
                         const active = selectedDate === dateStr;
                         return (
                           <button 
                             key={i}
-                            onClick={() => setSelectedDate(dateStr)}
-                            className={`flex flex-col items-center justify-center min-w-[70px] h-20 rounded-2xl border transition-all ${active ? 'bg-sky-600 border-sky-600 text-white font-bold shadow-lg shadow-sky-200' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'}`}
+                            onClick={() => !isBlocked && setSelectedDate(dateStr)}
+                            disabled={isBlocked}
+                            className={`flex flex-col items-center justify-center min-w-[70px] h-20 rounded-2xl border transition-all ${isBlocked ? 'bg-slate-100 border-slate-200 text-slate-300 line-through opacity-50 cursor-not-allowed' : active ? 'bg-sky-600 border-sky-600 text-white font-bold shadow-lg shadow-sky-200' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-slate-100'}`}
                           >
                             <span className="text-[10px] uppercase font-bold opacity-80">{dayName}</span>
                             <span className="text-xl">{date.getDate()}</span>
