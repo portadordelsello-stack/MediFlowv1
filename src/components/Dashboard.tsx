@@ -65,6 +65,9 @@ export default function Dashboard({ user }: { user: User }) {
   const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
+
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState(false);
   const [allClinics, setAllClinics] = useState<any[]>([]);
   const [editingClinic, setEditingClinic] = useState<any>(null);
   const [clinicToDelete, setClinicToDelete] = useState<any>(null);
@@ -468,7 +471,45 @@ export default function Dashboard({ user }: { user: User }) {
   };
 
   const handleUpgrade = async () => {
-    alert("Pronto integraremos Stripe para actualizar tu suscripción.");
+    setShowUpgradeModal(true);
+  };
+
+  const startCheckout = async (plan: string) => {
+    try {
+      setUpgradingPlan(true);
+      
+      const payload = {
+        reason: `Suscripción ${plan} - Turnely`,
+        auto_recurring: {
+          frequency: 1,
+          frequency_type: "months",
+          start_date: new Date().toISOString(),
+          end_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+          transaction_amount: plan === 'PREMIUM' ? 14999 : 4999,
+          currency_id: "ARS"
+        },
+        payer_email: user.email,
+        back_url: `${window.location.origin}/dashboard`
+      };
+
+      const res = await fetch('/api/mercadopago/create-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (data.init_point) {
+        window.location.href = data.init_point;
+      } else {
+        alert("Error al iniciar checkout. Revisa la configuración de Mercado Pago.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión");
+    } finally {
+      setUpgradingPlan(false);
+    }
   };
 
   const currentPlan = clinic?.plan || 'GRATIS';
@@ -1613,6 +1654,75 @@ export default function Dashboard({ user }: { user: User }) {
 
         </div>
       </main>
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl overflow-hidden shadow-2xl animate-scale-in">
+            <div className="p-8 text-center relative overflow-hidden bg-gradient-to-br from-indigo-500 to-sky-600 border-b border-white/10">
+               <div className="relative z-10">
+                 <h2 className="text-3xl font-bold text-white mb-2">Mejora tu Suscripción</h2>
+                 <p className="text-indigo-100 text-sm">Desbloquea el poder total de Turnely AI con Mercado Pago 🔒 Checkout Pro</p>
+               </div>
+            </div>
+            
+            <div className="p-8 grid md:grid-cols-2 gap-6 bg-slate-50">
+              <div className="bg-white rounded-2xl p-6 border border-slate-200 hover:border-sky-300 transition-colors shadow-sm relative flex flex-col">
+                 <div className="inline-block px-3 py-1 bg-sky-100 text-sky-800 text-[10px] font-bold tracking-widest uppercase rounded-full mb-4 w-max">
+                   Básico
+                 </div>
+                 <h3 className="text-4xl font-extrabold text-slate-900 mb-2">$4,999<span className="text-base font-medium text-slate-500">/mes</span></h3>
+                 <ul className="space-y-3 mb-8 text-sm text-slate-600 flex-1">
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> 500 mensajes / mes</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> Soporte estándar</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> Agenda compartida</li>
+                 </ul>
+                 <button
+                   onClick={() => startCheckout('BASICO')}
+                   disabled={upgradingPlan}
+                   className="w-full py-3 px-4 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-xl transition-colors mt-auto disabled:opacity-50"
+                 >
+                   {upgradingPlan ? 'Procesando...' : 'Obtener Básico'}
+                 </button>
+              </div>
+
+              <div className="bg-slate-900 rounded-2xl p-6 border border-slate-700 shadow-xl relative flex flex-col">
+                 <div className="absolute -top-3 -right-3">
+                   <span className="relative flex h-6 w-6">
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-6 w-6 bg-amber-500 border-2 border-slate-900"></span>
+                   </span>
+                 </div>
+                 <div className="inline-block px-3 py-1 bg-amber-500 whitespace-nowrap text-amber-950 text-[10px] font-bold tracking-widest uppercase rounded-full mb-4 w-max">
+                   Premium
+                 </div>
+                 <h3 className="text-4xl font-extrabold text-white mb-2">$14,999<span className="text-base font-medium text-slate-400">/mes</span></h3>
+                 <ul className="space-y-3 mb-8 text-sm text-slate-300 flex-1">
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> 1000+ mensajes / mes</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Soporte 24/7 prioritario</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Múltiples sucursales</li>
+                 </ul>
+                 <button
+                   onClick={() => startCheckout('PREMIUM')}
+                   disabled={upgradingPlan}
+                   className="w-full py-3 px-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl transition-colors mt-auto disabled:opacity-50"
+                 >
+                   {upgradingPlan ? 'Procesando...' : 'Obtener Premium'}
+                 </button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-100 flex justify-center">
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="px-6 py-2 text-sm font-semibold text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

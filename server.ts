@@ -9,6 +9,19 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import { initializeApp, App } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { MercadoPagoConfig, Preference, PreApprovalPlan, PreApproval } from 'mercadopago';
+
+// Initialize MP Client (Lazy creation logic inside endpoints where it's used so it doesn't crash without token)
+let mpClient: MercadoPagoConfig | null = null;
+function getMPClient() {
+  if (!mpClient) {
+    const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
+    if (token) {
+      mpClient = new MercadoPagoConfig({ accessToken: token });
+    }
+  }
+  return mpClient;
+}
 
 // Initialize Firebase Admin (Lazy)
 const firebaseAppConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
@@ -406,6 +419,83 @@ app.get('/api/whatsapp/status/:clinicId', (req, res) => {
   const messagesUsed = clinicConfig ? clinicConfig.messagesUsed : null;
   
   res.json({ status, qr, messagesUsed });
+});
+
+// Mercado Pago Routes
+app.post('/api/mercadopago/create-preference', async (req, res) => {
+  try {
+    const client = getMPClient();
+    if (!client) {
+      return res.status(500).json({ error: 'MERCADOPAGO_ACCESS_TOKEN no configurado' });
+    }
+
+    const { items, clinicId } = req.body;
+    
+    const preference = new Preference(client);
+    const result = await preference.create({
+      body: {
+        items: items,
+        metadata: {
+          clinicId: clinicId
+        },
+        back_urls: {
+          success: `${process.env.APP_URL || 'http://localhost:3000'}/panel/${clinicId}?status=success`,
+          failure: `${process.env.APP_URL || 'http://localhost:3000'}/panel/${clinicId}?status=failure`,
+          pending: `${process.env.APP_URL || 'http://localhost:3000'}/panel/${clinicId}?status=pending`
+        },
+        auto_return: 'approved'
+      }
+    });
+
+    res.json({ id: result.id });
+  } catch (error) {
+    console.error("Error creating preference:", error);
+    res.status(500).json({ error: 'Failed to create preference' });
+  }
+});
+
+app.post('/api/mercadopago/create-subscription', async (req, res) => {
+  try {
+    const client = getMPClient();
+    if (!client) {
+      return res.status(500).json({ error: 'MERCADOPAGO_ACCESS_TOKEN no configurado' });
+    }
+
+    const { reason, auto_recurring, back_url, payer_email } = req.body;
+    
+    const preApprovalPlan = new PreApprovalPlan(client);
+    
+    // We create a plan first
+    const planResult = await preApprovalPlan.create({
+      body: {
+        reason: reason,
+        auto_recurring: auto_recurring,
+        back_url: back_url || `${process.env.APP_URL || 'http://localhost:3000'}`
+      }
+    });
+
+    res.json({ init_point: planResult.init_point, plan_id: planResult.id });
+  } catch (error: any) {
+    console.error("Error creating subscription plan:", error?.message || error);
+    res.status(500).json({ error: 'Failed to create subscription plan' });
+  }
+});
+
+app.post('/api/mercadopago/webhook', async (req, res) => {
+  try {
+    const { action, data, type } = req.body;
+    console.log("Mercado Pago Webhook Received:", { action, type, data });
+    
+    // 1. Verify webhook signature if needed using MERCADOPAGO_WEBHOOK_SECRET
+    // 2. Fetch the subscription or payment from MP SDK using data.id
+    // 3. Update the clinic record in Firestore:
+    // e.g. getDb().collection('clinics').where('subscriptionId', '==', ...).update({ plan: 'PREMIUM' })
+    
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Webhook Error:", err);
+    res.sendStatus(500);
+  }
 });
 
 async function startServer() {
