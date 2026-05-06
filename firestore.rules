@@ -99,7 +99,7 @@ service cloud.firestore {
                           incoming().clinicOwnerId == existing().clinicOwnerId &&
                           incoming().createdAt == existing().createdAt &&
                            incoming().updatedAt == request.time &&
-                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'email']);
+                          incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt', 'phone', 'name', 'email', 'dni']);
                           
          allow delete: if isSignedIn() && isValidId(patientId) && clinicId == request.auth.uid;
       }
