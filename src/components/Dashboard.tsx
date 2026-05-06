@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, signOut } from 'firebase/auth';
-import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, collection } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X, HelpCircle, Send } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
