@@ -476,8 +476,8 @@ app.post('/api/mercadopago/create-subscription', async (req, res) => {
 
     res.json({ init_point: planResult.init_point, plan_id: planResult.id });
   } catch (error: any) {
-    console.error("Error creating subscription plan:", error?.message || error);
-    res.status(500).json({ error: 'Failed to create subscription plan' });
+    console.error("Error creating subscription plan:", JSON.stringify(error, null, 2));
+    res.status(500).json({ error: 'Failed to create subscription plan', details: error?.message || error?.response || error });
   }
 });
 

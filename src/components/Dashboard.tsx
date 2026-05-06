@@ -483,8 +483,6 @@ export default function Dashboard({ user }: { user: User }) {
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
-          start_date: new Date().toISOString(),
-          end_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
           transaction_amount: plan === 'PREMIUM' ? 14999 : 4999,
           currency_id: "ARS"
         },
@@ -502,11 +500,11 @@ export default function Dashboard({ user }: { user: User }) {
       if (data.init_point) {
         window.location.href = data.init_point;
       } else {
-        alert("Error al iniciar checkout. Revisa la configuración de Mercado Pago.");
+        alert("Error al iniciar checkout: " + (data.details || data.error || "Revisa la configuración de Mercado Pago."));
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error de conexión");
+      alert("Error de conexión: " + e.message);
     } finally {
       setUpgradingPlan(false);
     }
