@@ -936,13 +936,25 @@ export default function Dashboard({ user }: { user: User }) {
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-1.5">Hora</label>
-                        <input 
-                          type="time" 
+                        <select 
                           required
                           value={apptForm.time}
                           onChange={e => setApptForm({...apptForm, time: e.target.value})}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                        />
+                          className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm disabled:opacity-50"
+                          disabled={!apptForm.date}
+                        >
+                          <option value="" disabled>Seleccione hora</option>
+                          {apptForm.date && Array.from({ length: 31 }, (_, i) => `${String(Math.floor(i / 2) + 6).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`).map(time => {
+                            const isBooked = appointments.some(a => a.id !== apptForm.id && a.date === apptForm.date && a.time === time);
+                            const isBlocked = isTimeSlotBlocked(apptForm.date, time, clinic);
+                            const isDisabled = isBooked || isBlocked;
+                            return (
+                              <option key={time} value={time} disabled={isDisabled}>
+                                {time} {isDisabled ? '(Ocupado/Bloqueado)' : ''}
+                              </option>
+                            );
+                          })}
+                        </select>
                       </div>
                     </div>
                     <div>
