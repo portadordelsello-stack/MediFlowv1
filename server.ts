@@ -2,7 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type, FunctionDeclaration } from '@google/genai';
 import path from 'path';
 import fs from 'fs';
 import { Boom } from '@hapi/boom';
@@ -236,15 +236,87 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           await sock.sendPresenceUpdate('composing', remoteJid);
           
           const bookingUrl = `https://${host}/reservar/${clinicId}`;
-          const response = await ai.models.generateContent({
+          const consultarEstadoPaciente: FunctionDeclaration = {
+            name: "consultarEstadoPaciente",
+            description: "Consulta si el paciente está registrado y si tiene un turno pendiente usando su DNI. Úsalo siempre que el paciente te dé su DNI.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                dni: {
+                  type: Type.STRING,
+                  description: "El documento de identidad o DNI del paciente."
+                }
+              },
+              required: ["dni"]
+            }
+          };
+
+          const generationConfig = {
+            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI, usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
+            tools: [{ functionDeclarations: [consultarEstadoPaciente] }]
+          };
+
+          const response1 = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
-            config: {
-              systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente desea agendar un turno, proporciónale este link de nuestra agenda online: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`
-            }
+            config: generationConfig
           });
 
-          const replyText = response.text || 'Error generando respuesta.';
+          let replyText = 'Error generando respuesta.';
+
+          if (response1.functionCalls && response1.functionCalls.length > 0) {
+            const call = response1.functionCalls[0];
+            if (call.name === 'consultarEstadoPaciente') {
+              const dniArg = call.args.dni;
+              let toolResultStr = "Error al consultar la base de datos.";
+              
+              if (typeof dniArg === 'string') {
+                const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
+                const patientSnap = await patientsRef.where('dni', '==', dniArg).limit(1).get();
+                
+                if (patientSnap.empty) {
+                  toolResultStr = `Base de datos: El paciente con DNI ${dniArg} NO está en el sistema. Debe registrarse y sacar turno en el portal.`;
+                } else {
+                  const patientId = patientSnap.docs[0].id;
+                  const patientData = patientSnap.docs[0].data();
+                  const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
+                  // Consultar turnos futuros
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const apptSnap = await appointmentsRef
+                    .where('patientId', '==', patientId)
+                    .where('date', '>=', todayStr)
+                    .get();
+                  
+                  const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
+                  if (validAppts.length > 0) {
+                    const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
+                    const appt = sortedAppts[0].data();
+                    toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
+                  } else {
+                     toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
+                  }
+                }
+              }
+
+              const previousContent = response1.candidates?.[0]?.content;
+              if (previousContent) {
+                const response2 = await ai.models.generateContent({
+                  model: 'gemini-2.5-flash',
+                  contents: [
+                    { role: 'user', parts: [{ text: `Mensaje del paciente: "${textMessage}"` }] },
+                    previousContent,
+                    { role: 'user', parts: [{ functionResponse: { name: 'consultarEstadoPaciente', response: { result: toolResultStr } } }] }
+                  ],
+                  config: generationConfig
+                });
+                replyText = response2.text || 'No pude encontrar la información, disculpa las molestias.';
+              } else {
+                replyText = 'Error en el flujo de la consulta. Por favor, intenta de nuevo.';
+              }
+            }
+          } else {
+            replyText = response1.text || 'Error generando respuesta.';
+          }
 
           await sock.sendPresenceUpdate('paused', remoteJid);
           await sock.sendMessage(remoteJid, { text: replyText });
