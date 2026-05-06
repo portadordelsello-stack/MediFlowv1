@@ -130,8 +130,12 @@ export default function BookingPortal() {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-4 md:p-8 selection:bg-sky-100">
       <div className="max-w-xl mx-auto">
         <header className="text-center mb-10">
-           <div className="w-16 h-16 bg-sky-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-lg mx-auto mb-4">
-              {clinic.name?.charAt(0)}
+           <div className="w-16 h-16 bg-sky-600 rounded-2xl flex items-center justify-center text-white font-bold text-2xl shadow-lg mx-auto mb-4 overflow-hidden">
+              {clinic.logoUrl ? (
+                <img src={clinic.logoUrl} alt={clinic.name} className="w-full h-full object-cover" />
+              ) : (
+                clinic.name?.charAt(0)
+              )}
            </div>
            <h1 className="text-2xl font-bold text-slate-900">{clinic.name}</h1>
            <p className="text-slate-500 font-medium">{clinic.specialty}</p>

@@ -30,6 +30,8 @@ export default function Dashboard({ user }: { user: User }) {
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: '', specialty: '', whatsappNumber: '', contactEmail: '', logoUrl: '' });
 
   // Sync Patients
   useEffect(() => {
@@ -445,6 +447,24 @@ export default function Dashboard({ user }: { user: User }) {
       handleFirestoreError(err, OperationType.UPDATE, `clinics/${user.uid}`);
     }
     setSavingSettings(false);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clinic) return;
+    try {
+      await updateDoc(doc(db, 'clinics', user.uid), {
+        name: profileForm.name,
+        specialty: profileForm.specialty,
+        whatsappNumber: profileForm.whatsappNumber,
+        contactEmail: profileForm.contactEmail,
+        logoUrl: profileForm.logoUrl,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditingProfile(false);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleUpgrade = async () => {
@@ -1144,25 +1164,85 @@ export default function Dashboard({ user }: { user: User }) {
           {activeTab === 'perfil' && (
             <div className="max-w-2xl mx-auto space-y-8">
                <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-                  <h3 className="text-lg font-bold text-slate-900 mb-6">Información de la Clínica</h3>
-                  <div className="space-y-4">
-                     <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Propietario / Email</p>
-                        <p className="text-slate-800 font-medium">{user.email}</p>
-                     </div>
-                     <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Nombre de la Clínica</p>
-                        <p className="text-slate-800 font-medium">{clinic?.name}</p>
-                     </div>
-                     <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Especialidad</p>
-                        <p className="text-slate-800 font-medium">{clinic?.specialty}</p>
-                     </div>
-                     <div>
-                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Número de WhatsApp</p>
-                        <p className="text-slate-800 font-medium">{clinic?.whatsappNumber || 'No configurado'}</p>
-                     </div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-slate-900">Información de la Clínica</h3>
+                    {!isEditingProfile && currentPlan === 'PREMIUM' && (
+                      <button 
+                        onClick={() => {
+                          setProfileForm({
+                            name: clinic?.name || '',
+                            specialty: clinic?.specialty || '',
+                            whatsappNumber: clinic?.whatsappNumber || '',
+                            contactEmail: clinic?.contactEmail || user.email || '',
+                            logoUrl: clinic?.logoUrl || ''
+                          });
+                          setIsEditingProfile(true);
+                        }}
+                        className="text-sm text-sky-600 hover:text-sky-700 font-bold px-4 py-2 bg-sky-50 rounded-xl"
+                      >
+                        Editar
+                      </button>
+                    )}
+                    {!isEditingProfile && currentPlan !== 'PREMIUM' && (
+                      <div className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-medium">
+                        Edición solo disponible en Plan Premium
+                      </div>
+                    )}
                   </div>
+
+                  {isEditingProfile ? (
+                    <form onSubmit={handleSaveProfile} className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Email de Contacto</label>
+                        <input type="email" value={profileForm.contactEmail} onChange={e => setProfileForm({...profileForm, contactEmail: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Nombre de la Clínica</label>
+                        <input type="text" value={profileForm.name} onChange={e => setProfileForm({...profileForm, name: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white" required />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Especialidad</label>
+                        <input type="text" value={profileForm.specialty} onChange={e => setProfileForm({...profileForm, specialty: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white" required />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Número de WhatsApp</label>
+                        <input type="text" value={profileForm.whatsappNumber} onChange={e => setProfileForm({...profileForm, whatsappNumber: e.target.value})} className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">URL de Imagen de Perfil (Logo)</label>
+                        <input type="url" value={profileForm.logoUrl} onChange={e => setProfileForm({...profileForm, logoUrl: e.target.value})} placeholder="https://ejemplo.com/logo.png" className="w-full px-4 py-2 border rounded-xl bg-slate-50 focus:bg-white" />
+                      </div>
+                      <div className="flex gap-3 justify-end pt-4">
+                        <button type="button" onClick={() => setIsEditingProfile(false)} className="px-5 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors">Cancelar</button>
+                        <button type="submit" className="px-5 py-2 bg-slate-900 text-white font-bold rounded-xl shadow-md hover:bg-slate-800 transition-colors">Guardar Cambios</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-4">
+                       <div>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Email de Contacto</p>
+                          <p className="text-slate-800 font-medium">{clinic?.contactEmail || user.email}</p>
+                       </div>
+                       <div>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Nombre de la Clínica</p>
+                          <p className="text-slate-800 font-medium">{clinic?.name}</p>
+                       </div>
+                       <div>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Especialidad</p>
+                          <p className="text-slate-800 font-medium">{clinic?.specialty}</p>
+                       </div>
+                       <div>
+                          <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">Número de WhatsApp</p>
+                          <p className="text-slate-800 font-medium">{clinic?.whatsappNumber || 'No configurado'}</p>
+                       </div>
+                       {clinic?.logoUrl && (
+                         <div>
+                            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Logo</p>
+                            <img src={clinic.logoUrl} alt="Logo" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                         </div>
+                       )}
+                    </div>
+                  )}
                </div>
 
                <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
