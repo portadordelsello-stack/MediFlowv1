@@ -302,8 +302,10 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   const senderPhone = remoteJid.split('@')[0];
                   const cleanRegisteredPhone = patientData.phone ? patientData.phone.replace(/\\D/g, '') : '';
                   const cleanSenderPhone = senderPhone.replace(/\\D/g, '');
+                  const registeredLast4 = cleanRegisteredPhone.slice(-4);
+                  const senderLast4 = cleanSenderPhone.slice(-4);
 
-                  if (!cleanRegisteredPhone || (!cleanSenderPhone.includes(cleanRegisteredPhone) && !cleanRegisteredPhone.includes(cleanSenderPhone))) {
+                  if (!cleanRegisteredPhone || cleanRegisteredPhone.length < 4 || registeredLast4 !== senderLast4) {
                     toolResultStr = `ALERTA DE SEGURIDAD: El paciente está registrado, pero el número desde el que escribe NO coincide con su teléfono registrado. Por seguridad y privacidad de los datos, tienes PROHIBIDO brindarle información de la cuenta o turnos con ese DNI. Respóndele amablemente que por políticas de privacidad, debe comunicarse desde el número de teléfono con el que se registró, o contactarse directamente con administración para verificar su identidad.`;
                   } else {
                     const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
