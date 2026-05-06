@@ -62,9 +62,10 @@ export default function Dashboard({ user }: { user: User }) {
 
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
-  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 } });
+  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 }, prices: { BASICO: 4999, PREMIUM: 14999 } });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
+  const [systemPrices, setSystemPrices] = useState({ BASICO: 4999, PREMIUM: 14999 });
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState(false);
@@ -302,7 +303,8 @@ export default function Dashboard({ user }: { user: User }) {
 
   useEffect(() => {
      fetch('/api/system-limits').then(r => r.json()).then(data => {
-        if(data) setSystemLimits(data);
+        if(data && data.limits) setSystemLimits(data.limits);
+        if(data && data.prices) setSystemPrices(data.prices);
      }).catch(console.error);
   }, []);
 
@@ -312,7 +314,8 @@ export default function Dashboard({ user }: { user: User }) {
          setAdminConfig(prev => ({ 
              ...prev, 
              ...data, 
-             limits: { ...prev.limits, ...(data?.limits || {}) } 
+             limits: { ...prev.limits, ...(data?.limits || {}) },
+             prices: { ...prev.prices, ...(data?.prices || {}) }
          }));
        }).catch(console.error);
     }
@@ -483,7 +486,7 @@ export default function Dashboard({ user }: { user: User }) {
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
-          transaction_amount: plan === 'PREMIUM' ? 14999 : 4999,
+          transaction_amount: plan === 'PREMIUM' ? systemPrices.PREMIUM : systemPrices.BASICO,
           currency_id: "ARS"
         },
         payer_email: user.email,
@@ -1368,7 +1371,7 @@ export default function Dashboard({ user }: { user: User }) {
                       </div>
                     </div>
                     <div className="space-y-4">
-                      <h4 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Límites por Plan (Mensajes/Mes)</h4>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase mb-4 tracking-wider">Límites (Mensajes/Mes)</h4>
                       <div className="grid grid-cols-3 gap-3">
                         {['GRATIS', 'BASICO', 'PREMIUM'].map(p => (
                           <div key={p}>
@@ -1377,6 +1380,21 @@ export default function Dashboard({ user }: { user: User }) {
                               type="number" 
                               value={adminConfig.limits[p as keyof typeof adminConfig.limits]}
                               onChange={e => setAdminConfig({...adminConfig, limits: { ...adminConfig.limits, [p]: parseInt(e.target.value) || 0 }})}
+                              className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <h4 className="text-xs font-bold text-slate-400 uppercase mb-4 mt-6 tracking-wider">Precios (ARS)</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        {['BASICO', 'PREMIUM'].map(p => (
+                          <div key={p}>
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1">{p}</label>
+                            <input 
+                              type="number" 
+                              value={adminConfig.prices[p as keyof typeof adminConfig.prices]}
+                              onChange={e => setAdminConfig({...adminConfig, prices: { ...adminConfig.prices, [p]: parseInt(e.target.value) || 0 }})}
                               className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
                             />
                           </div>
@@ -1669,9 +1687,9 @@ export default function Dashboard({ user }: { user: User }) {
                  <div className="inline-block px-3 py-1 bg-sky-100 text-sky-800 text-[10px] font-bold tracking-widest uppercase rounded-full mb-4 w-max">
                    Básico
                  </div>
-                 <h3 className="text-4xl font-extrabold text-slate-900 mb-2">$4,999<span className="text-base font-medium text-slate-500">/mes</span></h3>
+                 <h3 className="text-4xl font-extrabold text-slate-900 mb-2">${systemPrices.BASICO?.toLocaleString() || '4,999'}<span className="text-base font-medium text-slate-500">/mes</span></h3>
                  <ul className="space-y-3 mb-8 text-sm text-slate-600 flex-1">
-                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> 500 mensajes / mes</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> {systemLimits.BASICO} mensajes / mes</li>
                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> Soporte estándar</li>
                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-sky-500" /> Agenda compartida</li>
                  </ul>
@@ -1694,9 +1712,9 @@ export default function Dashboard({ user }: { user: User }) {
                  <div className="inline-block px-3 py-1 bg-amber-500 whitespace-nowrap text-amber-950 text-[10px] font-bold tracking-widest uppercase rounded-full mb-4 w-max">
                    Premium
                  </div>
-                 <h3 className="text-4xl font-extrabold text-white mb-2">$14,999<span className="text-base font-medium text-slate-400">/mes</span></h3>
+                 <h3 className="text-4xl font-extrabold text-white mb-2">${systemPrices.PREMIUM?.toLocaleString() || '14,999'}<span className="text-base font-medium text-slate-400">/mes</span></h3>
                  <ul className="space-y-3 mb-8 text-sm text-slate-300 flex-1">
-                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> 1000+ mensajes / mes</li>
+                   <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> {systemLimits.PREMIUM}+ mensajes / mes</li>
                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Soporte 24/7 prioritario</li>
                    <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Múltiples sucursales</li>
                  </ul>

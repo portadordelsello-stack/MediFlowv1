@@ -60,6 +60,10 @@ function getSystemConfig() {
       GRATIS: 100,
       BASICO: 500,
       PREMIUM: 1000
+    },
+    prices: {
+      BASICO: 4999,
+      PREMIUM: 14999
     }
   };
 
@@ -67,7 +71,8 @@ function getSystemConfig() {
      try {
        const savedData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
        const mergedLimits = { ...envConfig.limits, ...(savedData.limits || {}) };
-       return { ...envConfig, ...savedData, limits: mergedLimits };
+       const mergedPrices = { ...envConfig.prices, ...(savedData.prices || {}) };
+       return { ...envConfig, ...savedData, limits: mergedLimits, prices: mergedPrices };
      } catch (e) {
        console.error("Error reading system config", e);
      }
@@ -368,17 +373,18 @@ app.get('/api/admin/system-config', (req, res) => {
 });
 
 app.post('/api/admin/system-config', (req, res) => {
-   const { apiKey, projectId, location, limits } = req.body;
+   const { apiKey, projectId, location, limits, prices } = req.body;
    const existing = getSystemConfig();
-   const newConfig = { ...existing, apiKey, projectId, location, limits: limits || existing.limits };
+   const newConfig = { ...existing, apiKey, projectId, location, limits: limits || existing.limits, prices: prices || existing.prices };
    fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
    initializeAI();
    res.json({ success: true });
 });
 
-// We need a way for regular clients to get the limits
+// We need a way for regular clients to get the limits and prices
 app.get('/api/system-limits', (req, res) => {
-   res.json(getSystemConfig().limits);
+   const config = getSystemConfig();
+   res.json({ limits: config.limits, prices: config.prices });
 });
 
 // API Routes
