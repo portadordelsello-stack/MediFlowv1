@@ -395,20 +395,22 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
     }
   };
 
+  const [pricesLoaded, setPricesLoaded] = useState(false);
+
   useEffect(() => {
      fetch('/api/system-limits').then(r => r.json()).then(data => {
         if(data && data.limits) setSystemLimits(data.limits);
         if(data && data.prices) setSystemPrices(data.prices);
-     }).catch(console.error);
+     }).catch(console.error).finally(() => setPricesLoaded(true));
   }, []);
 
   useEffect(() => {
      const pendingPlan = localStorage.getItem('turnely_selected_plan');
-     if (pendingPlan && systemPrices.BASICO > 0) {
+     if (pendingPlan && pricesLoaded) {
         localStorage.removeItem('turnely_selected_plan');
-        startCheckout(pendingPlan);
+        startCheckout(pendingPlan, systemPrices);
      }
-  }, [systemPrices]);
+  }, [pricesLoaded, systemPrices]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -631,16 +633,18 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
     setShowUpgradeModal(true);
   };
 
-  const startCheckout = async (plan: string) => {
+  const startCheckout = async (plan: string, overridePrices?: typeof systemPrices) => {
     try {
       setUpgradingPlan(true);
+      
+      const pricesToUse = overridePrices || systemPrices;
       
       const payload = {
         reason: `Suscripción ${plan} - Turnely`,
         auto_recurring: {
           frequency: 1,
           frequency_type: "months",
-          transaction_amount: plan === 'PREMIUM' ? systemPrices.PREMIUM : systemPrices.BASICO,
+          transaction_amount: plan === 'PREMIUM' ? pricesToUse.PREMIUM : pricesToUse.BASICO,
           currency_id: "ARS"
         },
         payer_email: user.email,
