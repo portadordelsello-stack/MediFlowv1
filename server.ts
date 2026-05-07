@@ -257,25 +257,21 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           const bookingUrl = `https://${host}/reservar/${clinicId}`;
           const consultarEstadoPaciente: FunctionDeclaration = {
             name: "consultarEstadoPaciente",
-            description: "Consulta si el paciente está registrado y si tiene un turno pendiente. Requiere el DNI y el PIN de 4 dígitos proporcionado por el usuario.",
+            description: "Consulta si el paciente está registrado y si tiene un turno pendiente utilizando su PIN de 4 dígitos.",
             parameters: {
               type: Type.OBJECT,
               properties: {
-                dni: {
-                  type: Type.STRING,
-                  description: "El documento de identidad o DNI del paciente."
-                },
                 pin: {
                   type: Type.STRING,
                   description: "El PIN de seguridad de 4 dígitos del paciente."
                 }
               },
-              required: ["dni", "pin"]
+              required: ["pin"]
             }
           };
 
           const generationConfig = {
-            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI pero no su PIN, indícale amablemente que necesitas tanto su DNI como su PIN de seguridad de 4 dígitos para consultar sus turnos. Usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos solo si ha proporcionado AMBOS datos. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
+            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente indica que quiere consultar sus turnos, pídele SOLAMENTE su PIN de seguridad de 4 dígitos. Usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos proporcionando este PIN. Si tiene turno, recuérdale la fecha y hora. Si el PIN es incorrecto o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
             tools: [{ functionDeclarations: [consultarEstadoPaciente] }]
           };
 
@@ -290,46 +286,40 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           if (response1.functionCalls && response1.functionCalls.length > 0) {
             const call = response1.functionCalls[0];
             if (call.name === 'consultarEstadoPaciente') {
-              const dniArg = call.args.dni;
               const pinArg = call.args.pin;
               let toolResultStr = "Error al consultar la base de datos.";
               
-              if (typeof dniArg === 'string') {
+              if (typeof pinArg === 'string' || typeof pinArg === 'number') {
+                const pinStr = String(pinArg).trim();
                 const patientsRef = getDb().collection('clinics').doc(clinicId).collection('patients');
-                const patientSnap = await patientsRef.where('dni', '==', dniArg).limit(1).get();
+                const patientSnap = await patientsRef.where('pin', '==', pinStr).limit(1).get();
                 
                 if (patientSnap.empty) {
-                  toolResultStr = `Base de datos: El paciente con DNI ${dniArg} NO está en el sistema. Debe registrarse y sacar turno en el portal.`;
+                  toolResultStr = `Base de datos: El paciente con PIN ${pinStr} NO está en el sistema. Debe registrarse y sacar turno en el portal, o el PIN es incorrecto.`;
                 } else {
                   const patientId = patientSnap.docs[0].id;
                   const patientData = patientSnap.docs[0].data();
                   
-                  // Security Check: Match provided PIN vs Database PIN
-                  const dbPin = patientData.pin || '';
-
-                  if (!dbPin || String(pinArg) !== String(dbPin)) {
-                    toolResultStr = `ALERTA DE SEGURIDAD ESTRICTA: El PIN provisto no coincide con el registrado para el DNI suministrado. TIENES PROHIBIDO entregar información personal o de turnos. Responde indicando que por políticas de privacidad el PIN es incorrecto y no puedes darle información.`;
+                  // Security Check: No longer requires DB PIN comparison because we searched by it
+                  const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
+                  // Consultar turnos futuros
+                  const d = new Date();
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const todayStr = `${year}-${month}-${day}`;
+                  const apptSnap = await appointmentsRef
+                    .where('patientId', '==', patientId)
+                    .where('date', '>=', todayStr)
+                    .get();
+                  
+                  const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
+                  if (validAppts.length > 0) {
+                    const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
+                    const appt = sortedAppts[0].data();
+                    toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
                   } else {
-                    const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
-                    // Consultar turnos futuros
-                    const d = new Date();
-                    const year = d.getFullYear();
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const day = String(d.getDate()).padStart(2, '0');
-                    const todayStr = `${year}-${month}-${day}`;
-                    const apptSnap = await appointmentsRef
-                      .where('patientId', '==', patientId)
-                      .where('date', '>=', todayStr)
-                      .get();
-                    
-                    const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
-                    if (validAppts.length > 0) {
-                      const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
-                      const appt = sortedAppts[0].data();
-                      toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
-                    } else {
-                       toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
-                    }
+                     toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
                   }
                 }
               }
