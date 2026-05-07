@@ -155,7 +155,7 @@ export default function BookingPortal() {
     if (selectedDate && clinicId) {
       const q = query(collection(db, 'clinics', clinicId, 'appointments'), where('date', '==', selectedDate));
       getDocs(q).then(snapshot => {
-        setOccupiedSlots(snapshot.docs.filter(d => d.data().status === 'SCHEDULED').map(d => d.data().time));
+        setOccupiedSlots(snapshot.docs.filter(d => d.data().status !== 'CANCELLED').map(d => d.data().time));
       }).catch(err => {
         console.error("Error fetching available appointments: ", err);
       });

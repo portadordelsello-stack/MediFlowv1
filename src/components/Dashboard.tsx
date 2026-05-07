@@ -863,7 +863,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         const month = String(currentMonthDate.getMonth() + 1).padStart(2, '0');
                         const day = String(i + 1).padStart(2, '0');
                         const dateStr = `${year}-${month}-${day}`;
-                        const dayAppointments = appointments.filter(a => a.date === dateStr);
+                        const dayAppointments = appointments.filter(a => a.date === dateStr && a.status !== 'CANCELLED');
                         const isSelected = selectedDate === dateStr;
                         const isBlocked = isDateBlocked(dateStr, clinic);
                         return (
@@ -900,7 +900,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                     </div>
                   </div>
                   <div className="space-y-4 flex-1 overflow-y-auto max-h-[500px] pr-2">
-                     {appointments.filter(a => a.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)).map((app) => {
+                     {appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED').sort((a, b) => a.time.localeCompare(b.time)).map((app) => {
                         const patient = patients.find(p => p.id === app.patientId);
                         return (
                           <div key={app.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
@@ -927,7 +927,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                           </div>
                         );
                      })}
-                     {appointments.length === 0 && (
+                     {appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED').length === 0 && (
                         <div className="text-center py-10">
                            <Calendar className="w-10 h-10 text-slate-200 mx-auto mb-3" />
                            <p className="text-sm text-slate-400 font-medium text-balance">No hay turnos agendados aún.</p>
@@ -938,7 +938,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         <h4 className="text-sm font-bold text-slate-800 mb-4">Horarios del Día</h4>
                         <div className="grid grid-cols-4 gap-2">
                           {Array.from({ length: 31 }, (_, i) => `${String(Math.floor(i / 2) + 6).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`).map(time => {
-                            const isBooked = appointments.some(a => a.date === selectedDate && a.time === time);
+                            const isBooked = appointments.some(a => a.date === selectedDate && a.time === time && a.status !== 'CANCELLED');
                             const isBlocked = isTimeSlotBlocked(selectedDate, time, clinic);
                             const active = selectedAgendaSlot === time;
                             return (
@@ -1063,7 +1063,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         >
                           <option value="" disabled>Seleccione hora</option>
                           {apptForm.date && Array.from({ length: 31 }, (_, i) => `${String(Math.floor(i / 2) + 6).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`).map(time => {
-                            const isBooked = appointments.some(a => a.id !== apptForm.id && a.date === apptForm.date && a.time === time);
+                            const isBooked = appointments.some(a => a.id !== apptForm.id && a.date === apptForm.date && a.time === time && a.status !== 'CANCELLED');
                             const isBlocked = isTimeSlotBlocked(apptForm.date, time, clinic);
                             const isDisabled = isBooked || isBlocked;
                             return (
