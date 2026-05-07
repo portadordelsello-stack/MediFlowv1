@@ -299,7 +299,7 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   const patientId = patientSnap.docs[0].id;
                   const patientData = patientSnap.docs[0].data();
 
-                  const senderPhone = remoteJid.split('@')[0];
+                  const senderPhone = remoteJid.split('@')[0].split(':')[0];
                   const cleanRegisteredPhone = patientData.phone ? patientData.phone.replace(/\\D/g, '') : '';
                   const cleanSenderPhone = senderPhone.replace(/\\D/g, '');
                   const registeredLast4 = cleanRegisteredPhone.slice(-4);
