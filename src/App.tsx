@@ -45,6 +45,16 @@ function MainApp() {
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
 
+  const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
+  const [systemPrices, setSystemPrices] = useState({ BASICO: 4999, PREMIUM: 14999 });
+
+  useEffect(() => {
+     fetch('/api/system-limits').then(r => r.json()).then(data => {
+        if(data && data.limits) setSystemLimits(data.limits);
+        if(data && data.prices) setSystemPrices(data.prices);
+     }).catch(console.error);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (u) {
@@ -195,8 +205,7 @@ function MainApp() {
                  </p>
               </div>
            </div>
-
-           {/* PRICING */}
+                   {/* PRICING */}
            <div className="max-w-5xl mx-auto border-t border-slate-100 pt-20 mt-20 text-center animate-fade-in-up md:animate-none">
               <h2 className="text-3xl font-bold text-slate-900 mb-4">Elige el plan ideal para tu clínica</h2>
               <p className="text-slate-500 mb-12 max-w-2xl mx-auto">Comienza automatizando ahora y mejora tu plan a medida que creces.</p>
@@ -209,7 +218,7 @@ function MainApp() {
                     <ul className="space-y-3 mb-8 flex-1">
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Bots AI auto-regulados</li>
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Integración WhatsApp Web</li>
-                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 100 mensajes límite mensuales</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> {systemLimits.GRATIS} mensajes límite mensuales</li>
                     </ul>
                     <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Empezar gratis</button>
                  </div>
@@ -218,26 +227,26 @@ function MainApp() {
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-sky-500 text-white px-3 py-1 rounded-full text-xs font-bold tracking-wider">MÁS POPULAR</div>
                     <h3 className="text-xl font-bold text-white mb-2">BÁSICO</h3>
                     <p className="text-slate-400 text-sm mb-6">Para clínicas en crecimiento estable.</p>
-                    <div className="text-4xl font-extrabold text-white mb-6">$39<span className="text-lg text-slate-400 font-normal">/mes</span></div>
+                    <div className="text-4xl font-extrabold text-white mb-6">${systemPrices.BASICO?.toLocaleString() || '39'}<span className="text-lg text-slate-400 font-normal">/mes</span></div>
                     <ul className="space-y-3 mb-8 flex-1">
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Todo lo de GRATIS</li>
                        <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> Instrucciones personalizadas de IA</li>
-                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> 500 mensajes límite mensuales</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-300"><ShieldCheck className="w-4 h-4 text-sky-400" /> {systemLimits.BASICO} mensajes límite mensuales</li>
                     </ul>
-                    <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
+                    <button onClick={() => { localStorage.setItem('turnely_selected_plan', 'BASICO'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 transition-colors">Empezar Básico</button>
                  </div>
 
                  <div className="bg-white border border-slate-200 p-8 rounded-3xl transition-transform hover:-translate-y-1 shadow-sm flex flex-col text-left">
                     <h3 className="text-xl font-bold text-slate-900 mb-2">PREMIUM</h3>
                     <p className="text-slate-500 text-sm mb-6">Flujo de mensajería ininterrumpida.</p>
-                    <div className="text-4xl font-extrabold text-slate-900 mb-6">$89<span className="text-lg text-slate-500 font-normal">/mes</span></div>
+                    <div className="text-4xl font-extrabold text-slate-900 mb-6">${systemPrices.PREMIUM?.toLocaleString() || '89'}<span className="text-lg text-slate-500 font-normal">/mes</span></div>
                     <ul className="space-y-3 mb-8 flex-1">
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Todo lo de BÁSICO</li>
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Agendamiento automático global</li>
-                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> 1000 mensajes límite mensuales</li>
+                       <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> {systemLimits.PREMIUM} mensajes límite mensuales</li>
                        <li className="flex items-center gap-2 text-sm text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-500" /> Soporte prioritario 24/7</li>
                     </ul>
-                    <button onClick={() => setShowLoginModal(true)} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Elegir Premium</button>
+                    <button onClick={() => { localStorage.setItem('turnely_selected_plan', 'PREMIUM'); setShowLoginModal(true); }} className="w-full py-3 px-4 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors">Elegir Premium</button>
                  </div>
               </div>
            </div>

@@ -403,6 +403,14 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   }, []);
 
   useEffect(() => {
+     const pendingPlan = localStorage.getItem('turnely_selected_plan');
+     if (pendingPlan && systemPrices.BASICO > 0) {
+        localStorage.removeItem('turnely_selected_plan');
+        startCheckout(pendingPlan);
+     }
+  }, [systemPrices]);
+
+  useEffect(() => {
     if (isAdmin) {
        fetch('/api/admin/system-config').then(r => r.json()).then(data => {
          setAdminConfig(prev => ({ 
