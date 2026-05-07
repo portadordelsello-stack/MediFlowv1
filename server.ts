@@ -298,25 +298,38 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                 } else {
                   const patientId = patientSnap.docs[0].id;
                   const patientData = patientSnap.docs[0].data();
-                  const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
-                  // Consultar turnos futuros
-                  const d = new Date();
-                  const year = d.getFullYear();
-                  const month = String(d.getMonth() + 1).padStart(2, '0');
-                  const day = String(d.getDate()).padStart(2, '0');
-                  const todayStr = `${year}-${month}-${day}`;
-                  const apptSnap = await appointmentsRef
-                    .where('patientId', '==', patientId)
-                    .where('date', '>=', todayStr)
-                    .get();
                   
-                  const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
-                  if (validAppts.length > 0) {
-                    const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
-                    const appt = sortedAppts[0].data();
-                    toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
+                  // Security Check: Match last 4 digits of WhatsApp phone vs Database phone
+                  const incomingFull = remoteJid.split('@')[0];
+                  const incomingClean = incomingFull.split(':')[0];
+                  const incomingLast4 = incomingClean.slice(-4);
+                  
+                  const dbPhoneClean = (patientData.phone || '').replace(/\D/g, '');
+                  const dbPhoneLast4 = dbPhoneClean.slice(-4);
+
+                  if (incomingLast4 !== dbPhoneLast4) {
+                    toolResultStr = `ALERTA DE SEGURIDAD ESTRICTA: El número de WhatsApp del usuario no coincide con el registrado para el DNI suministrado. TIENES PROHIBIDO entregar información personal o de turnos. Responde indicando que por políticas de privacidad no puedes darle información y debe comunicarse directamente con la clínica.`;
                   } else {
-                     toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
+                    const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
+                    // Consultar turnos futuros
+                    const d = new Date();
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const todayStr = `${year}-${month}-${day}`;
+                    const apptSnap = await appointmentsRef
+                      .where('patientId', '==', patientId)
+                      .where('date', '>=', todayStr)
+                      .get();
+                    
+                    const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
+                    if (validAppts.length > 0) {
+                      const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
+                      const appt = sortedAppts[0].data();
+                      toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
+                    } else {
+                       toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
+                    }
                   }
                 }
               }
