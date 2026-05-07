@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer, limit } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer, limit, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -26,9 +26,10 @@ const isTimeSlotBlocked = (dateStr: string, timeStr: string, clinicObj: any) => 
 export default function BookingPortal() {
   const { clinicId } = useParams<{ clinicId: string }>();
   const [clinic, setClinic] = useState<any>(null);
-  const [step, setStep] = useState<'dni' | 'register' | 'slots' | 'confirm'>('dni');
+  const [step, setStep] = useState<'dni' | 'register' | 'slots' | 'confirm' | 'has_appointment'>('dni');
   const [dni, setDni] = useState('');
   const [patient, setPatient] = useState<any>(null);
+  const [existingAppointment, setExistingAppointment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState('');
@@ -85,7 +86,15 @@ export default function BookingPortal() {
       if (!snapshot.empty) {
         const pData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
         setPatient(pData);
-        setStep('slots');
+
+        const apptQ = query(collection(db, 'clinics', clinicId, 'appointments'), where('patientId', '==', pData.id), where('status', '==', 'SCHEDULED'));
+        const apptSnapshot = await getDocs(apptQ);
+        if (!apptSnapshot.empty) {
+          setExistingAppointment({ id: apptSnapshot.docs[0].id, ...apptSnapshot.docs[0].data() });
+          setStep('has_appointment');
+        } else {
+          setStep('slots');
+        }
       } else {
         setStep('register');
       }
@@ -120,11 +129,33 @@ export default function BookingPortal() {
     setRegistering(false);
   };
 
+  const cancelAppointment = async () => {
+    if (!existingAppointment || !clinicId) return;
+    const confirmCancel = window.confirm("¿Está seguro que desea cancelar su turno?");
+    if (!confirmCancel) return;
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'clinics', clinicId, 'appointments', existingAppointment.id), {
+        status: 'CANCELLED',
+        updatedAt: serverTimestamp()
+      });
+      alert("Su turno ha sido cancelado exitosamente.");
+      setExistingAppointment(null);
+      setDni('');
+      setPatient(null);
+      setStep('dni');
+    } catch (err) {
+      console.error(err);
+      setError('Error al cancelar su turno.');
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (selectedDate && clinicId) {
       const q = query(collection(db, 'clinics', clinicId, 'appointments'), where('date', '==', selectedDate));
       getDocs(q).then(snapshot => {
-        setOccupiedSlots(snapshot.docs.map(d => d.data().time));
+        setOccupiedSlots(snapshot.docs.filter(d => d.data().status === 'SCHEDULED').map(d => d.data().time));
       }).catch(err => {
         console.error("Error fetching available appointments: ", err);
       });
@@ -215,6 +246,44 @@ export default function BookingPortal() {
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </div>
+              </div>
+            )}
+
+            {step === 'has_appointment' && (
+              <div className="animate-fade-in text-center py-4">
+                 <div className="w-16 h-16 bg-sky-50 text-sky-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <CalendarIcon className="w-8 h-8" />
+                 </div>
+                 <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Ya tienes un turno</h2>
+                 <p className="text-slate-500 mb-8">Hola <b>{patient?.name}</b>, hemos detectado que ya cuentas con un turno programado en nuestra clínica.</p>
+                 
+                 <div className="bg-slate-50 p-6 rounded-3xl mb-8 text-left border border-slate-100 space-y-3">
+                    <div className="flex justify-between border-b border-slate-200 pb-2">
+                       <span className="text-slate-400 font-bold text-[10px] uppercase">Fecha</span>
+                       <span className="font-bold text-slate-800">{existingAppointment?.date}</span>
+                    </div>
+                    <div className="flex justify-between">
+                       <span className="text-slate-400 font-bold text-[10px] uppercase">Horario</span>
+                       <span className="font-bold text-slate-800">{existingAppointment?.time}h</span>
+                    </div>
+                 </div>
+
+                 <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => { setDni(''); setPatient(null); setExistingAppointment(null); setStep('dni'); }}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 px-6 rounded-2xl transition-all shadow-md"
+                    >
+                      Volver al inicio
+                    </button>
+                    <button 
+                      onClick={cancelAppointment}
+                      disabled={loading}
+                      className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 px-6 rounded-2xl transition-all border border-red-200"
+                    >
+                      {loading ? 'Cancelando...' : 'Cancelar turno'}
+                    </button>
+                 </div>
+                 {error && <p className="text-sm text-red-500 font-medium mt-4">{error}</p>}
               </div>
             )}
 
