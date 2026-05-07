@@ -56,6 +56,7 @@ function getSystemConfig() {
     apiKey: process.env.AGENT_PLATFORM_API_KEY || '',
     projectId: process.env.VERTEX_PROJECT_ID || '',
     location: process.env.VERTEX_LOCATION || 'us-central1',
+    model: process.env.VERTEX_MODEL || 'gemini-2.5-flash',
     limits: {
       GRATIS: 100,
       BASICO: 500,
@@ -275,8 +276,9 @@ async function startWhatsAppBot(clinicId: string, host: string) {
             tools: [{ functionDeclarations: [consultarEstadoPaciente] }]
           };
 
+          const cfg = getSystemConfig();
           const response1 = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: cfg.model || 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
             config: generationConfig
           });
@@ -323,8 +325,9 @@ async function startWhatsAppBot(clinicId: string, host: string) {
 
               const previousContent = response1.candidates?.[0]?.content;
               if (previousContent) {
+                const cfg = getSystemConfig();
                 const response2 = await ai.models.generateContent({
-                  model: 'gemini-2.5-flash',
+                  model: cfg.model || 'gemini-2.5-flash',
                   contents: [
                     { role: 'user', parts: [{ text: `Mensaje del paciente: "${textMessage}"` }] },
                     previousContent,
