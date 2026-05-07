@@ -906,8 +906,8 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                           <div key={app.id} className="p-4 border border-slate-100 rounded-xl bg-slate-50 border-l-4 border-l-sky-500">
                              <div className="flex justify-between items-start mb-1">
                                 <p className="text-xs font-bold text-slate-400">{app.date} - {app.time}</p>
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${app.status === 'CONFIRMED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                                  {app.status}
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-amber-100 text-amber-700">
+                                  AGENDADO
                                 </span>
                              </div>
                              <div className="flex items-center justify-between mt-2">
@@ -1075,19 +1075,6 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                         </select>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-1.5">Estado</label>
-                      <select
-                        value={apptForm.status}
-                        onChange={e => setApptForm({...apptForm, status: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm bg-white"
-                      >
-                        <option value="SCHEDULED">AGENDADO</option>
-                        <option value="CONFIRMED">CONFIRMADO</option>
-                        <option value="CANCELLED">CANCELADO</option>
-                        <option value="COMPLETED">COMPLETADO</option>
-                      </select>
-                    </div>
                   </div>
                   <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
                     <button 
@@ -1102,7 +1089,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                       disabled={savingAppt || patients.length === 0}
                       className="flex-1 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-md shadow-indigo-100 disabled:opacity-50"
                     >
-                      {savingAppt ? 'Guardando...' : 'Guardar Turno'}
+                      {savingAppt ? 'Reservando...' : 'Reservar'}
                     </button>
                   </div>
                 </form>
