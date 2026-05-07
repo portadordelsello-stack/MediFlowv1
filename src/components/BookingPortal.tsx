@@ -40,10 +40,6 @@ export default function BookingPortal() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [occupiedSlots, setOccupiedSlots] = useState<any[]>([]);
-  
-  // PIN Modal
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [generatedPin, setGeneratedPin] = useState('');
 
   const [currentMonthDate, setCurrentMonthDate] = useState(() => {
     const d = new Date();
@@ -104,7 +100,6 @@ export default function BookingPortal() {
     if (!formData.name || !formData.phone || !clinicId) return;
     setRegistering(true);
     try {
-      const pin = Math.floor(1000 + Math.random() * 9000).toString();
       const docRef = await addDoc(collection(db, 'clinics', clinicId, 'patients'), {
         clinicOwnerId: clinicId,
         dni,
@@ -113,13 +108,11 @@ export default function BookingPortal() {
         email: formData.email,
         address: formData.address,
         healthInsurance: formData.healthInsurance,
-        pin: pin,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setPatient({ id: docRef.id, name: formData.name, dni, phone: formData.phone, email: formData.email, pin });
-      setGeneratedPin(pin);
-      setShowPinModal(true);
+      setPatient({ id: docRef.id, name: formData.name, dni, phone: formData.phone, email: formData.email });
+      setStep('slots');
     } catch (err) {
       console.error(err);
       setError('Error al registrar. Intente nuevamente.');
@@ -437,33 +430,6 @@ export default function BookingPortal() {
            </p>
         </footer>
       </div>
-
-      {/* PIN Modal */}
-      {showPinModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-10 h-10 text-sky-600" />
-            </div>
-            <h3 className="text-2xl font-extrabold text-slate-900 mb-2">¡Registro Exitoso!</h3>
-            <p className="text-slate-500 mb-6 font-medium leading-relaxed">
-              Tu cuenta ha sido creada. Este es tu <strong className="text-slate-800">PIN de seguridad</strong>. Búscalo cada vez que quieras agendar turnos o hacer consultas por WhatsApp.
-            </p>
-            <div className="bg-slate-100 border border-slate-200 rounded-2xl py-6 mb-8">
-              <span className="text-6xl font-black text-sky-600 tracking-widest">{generatedPin}</span>
-            </div>
-            <button 
-              onClick={() => {
-                setShowPinModal(false);
-                setStep('slots');
-              }}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl transition-colors shadow-lg"
-            >
-              Guardado, continuar a los turnos
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
