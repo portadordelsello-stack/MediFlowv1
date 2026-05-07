@@ -151,7 +151,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
-  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', model: 'gemini-2.5-flash', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 }, prices: { BASICO: 4999, PREMIUM: 14999 } });
+  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 }, prices: { BASICO: 4999, PREMIUM: 14999 } });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
   const [systemPrices, setSystemPrices] = useState({ BASICO: 4999, PREMIUM: 14999 });
@@ -1808,30 +1808,6 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                           onChange={e => setAdminConfig({...adminConfig, projectId: e.target.value})}
                           className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Ubicación (Location)</label>
-                        <input 
-                          type="text" 
-                          value={adminConfig.location}
-                          onChange={e => setAdminConfig({...adminConfig, location: e.target.value})}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Modelo de IA (Vertex)</label>
-                        <select 
-                          value={adminConfig.model}
-                          onChange={e => setAdminConfig({...adminConfig, model: e.target.value})}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-                        >
-                          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                          <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                          <option value="gemini-1.0-pro">Gemini 1.0 Pro</option>
-                        </select>
                       </div>
                     </div>
                     <div className="space-y-4">

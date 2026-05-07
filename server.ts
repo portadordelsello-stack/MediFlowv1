@@ -56,7 +56,6 @@ function getSystemConfig() {
     apiKey: process.env.AGENT_PLATFORM_API_KEY || '',
     projectId: process.env.VERTEX_PROJECT_ID || '',
     location: process.env.VERTEX_LOCATION || 'us-central1',
-    model: process.env.VERTEX_MODEL || 'gemini-2.5-flash',
     limits: {
       GRATIS: 100,
       BASICO: 500,
@@ -272,13 +271,12 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           };
 
           const generationConfig = {
-            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI (incluso si solo envía el número sin texto adicional), usa inmediatamente la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos, sin pedirle ninguna confirmación. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
+            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI, usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
             tools: [{ functionDeclarations: [consultarEstadoPaciente] }]
           };
 
-          const cfg = getSystemConfig();
           const response1 = await ai.models.generateContent({
-            model: cfg.model || 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash',
             contents: `Mensaje del paciente: "${textMessage}"`,
             config: generationConfig
           });
@@ -325,9 +323,8 @@ async function startWhatsAppBot(clinicId: string, host: string) {
 
               const previousContent = response1.candidates?.[0]?.content;
               if (previousContent) {
-                const cfg = getSystemConfig();
                 const response2 = await ai.models.generateContent({
-                  model: cfg.model || 'gemini-2.5-flash',
+                  model: 'gemini-2.5-flash',
                   contents: [
                     { role: 'user', parts: [{ text: `Mensaje del paciente: "${textMessage}"` }] },
                     previousContent,
