@@ -298,36 +298,25 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                 } else {
                   const patientId = patientSnap.docs[0].id;
                   const patientData = patientSnap.docs[0].data();
-
-                  const senderPhone = remoteJid.split('@')[0].split(':')[0];
-                  const cleanRegisteredPhone = patientData.phone ? patientData.phone.replace(/\\D/g, '') : '';
-                  const cleanSenderPhone = senderPhone.replace(/\\D/g, '');
-                  const registeredLast4 = cleanRegisteredPhone.slice(-4);
-                  const senderLast4 = cleanSenderPhone.slice(-4);
-
-                  if (!cleanRegisteredPhone || cleanRegisteredPhone.length < 4 || registeredLast4 !== senderLast4) {
-                    toolResultStr = `ALERTA DE SEGURIDAD: El paciente está registrado, pero el número desde el que escribe NO coincide con su teléfono registrado. Por seguridad y privacidad de los datos, tienes PROHIBIDO brindarle información de la cuenta o turnos con ese DNI. Respóndele amablemente que por políticas de privacidad, debe comunicarse desde el número de teléfono con el que se registró, o contactarse directamente con administración para verificar su identidad.`;
+                  const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
+                  // Consultar turnos futuros
+                  const d = new Date();
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  const todayStr = `${year}-${month}-${day}`;
+                  const apptSnap = await appointmentsRef
+                    .where('patientId', '==', patientId)
+                    .where('date', '>=', todayStr)
+                    .get();
+                  
+                  const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
+                  if (validAppts.length > 0) {
+                    const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
+                    const appt = sortedAppts[0].data();
+                    toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
                   } else {
-                    const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
-                    // Consultar turnos futuros
-                    const d = new Date();
-                    const year = d.getFullYear();
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const day = String(d.getDate()).padStart(2, '0');
-                    const todayStr = `${year}-${month}-${day}`;
-                    const apptSnap = await appointmentsRef
-                      .where('patientId', '==', patientId)
-                      .where('date', '>=', todayStr)
-                      .get();
-                    
-                    const validAppts = apptSnap.docs.filter((d: any) => d.data().status !== 'CANCELLED');
-                    if (validAppts.length > 0) {
-                      const sortedAppts = validAppts.sort((a: any, b: any) => a.data().date.localeCompare(b.data().date));
-                      const appt = sortedAppts[0].data();
-                      toolResultStr = `Base de datos: Verificación exitosa. El paciente ${patientData.name || 'registrado'} tiene un turno CONFIRMADO el ${appt.date} a las ${appt.time}h.`;
-                    } else {
-                       toolResultStr = `Base de datos: Verificación exitosa. El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
-                    }
+                     toolResultStr = `Base de datos: El paciente ${patientData.name || 'registrado'} está registrado en el sistema pero NO tiene turnos pendientes. Ofrécele el portal de turnos para agendar.`;
                   }
                 }
               }
