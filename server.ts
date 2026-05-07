@@ -304,10 +304,16 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   const incomingClean = incomingFull.split(':')[0];
                   const incomingLast4 = incomingClean.slice(-4);
                   
-                  const dbPhoneClean = (patientData.phone || '').replace(/\D/g, '');
+                  const dbPhoneRaw = patientData.phone || '';
+                  const dbPhoneStr = String(dbPhoneRaw);
+                  const dbPhoneClean = dbPhoneStr.replace(/\D/g, '');
                   const dbPhoneLast4 = dbPhoneClean.slice(-4);
 
-                  if (incomingLast4 !== dbPhoneLast4) {
+                  const logMsg = `[${new Date().toISOString()}] Security check for DNI ${dniArg}: incomingFull=${incomingFull}, incomingClean=${incomingClean}, incomingLast4=${incomingLast4}, dbPhoneRaw=${dbPhoneRaw}, dbPhoneClean=${dbPhoneClean}, dbPhoneLast4=${dbPhoneLast4}\n`;
+                  console.log(logMsg);
+                  import('fs').then(fs => fs.appendFileSync('wa_logs.txt', logMsg)).catch(console.error);
+
+                  if (!dbPhoneLast4 || incomingLast4 !== dbPhoneLast4) {
                     toolResultStr = `ALERTA DE SEGURIDAD ESTRICTA: El número de WhatsApp del usuario no coincide con el registrado para el DNI suministrado. TIENES PROHIBIDO entregar información personal o de turnos. Responde indicando que por políticas de privacidad no puedes darle información y debe comunicarse directamente con la clínica.`;
                   } else {
                     const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
