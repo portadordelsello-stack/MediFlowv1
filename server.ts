@@ -257,21 +257,25 @@ async function startWhatsAppBot(clinicId: string, host: string) {
           const bookingUrl = `https://${host}/reservar/${clinicId}`;
           const consultarEstadoPaciente: FunctionDeclaration = {
             name: "consultarEstadoPaciente",
-            description: "Consulta si el paciente está registrado y si tiene un turno pendiente usando su DNI. Úsalo siempre que el paciente te dé su DNI.",
+            description: "Consulta si el paciente está registrado y si tiene un turno pendiente. Requiere el DNI y el PIN de 4 dígitos proporcionado por el usuario.",
             parameters: {
               type: Type.OBJECT,
               properties: {
                 dni: {
                   type: Type.STRING,
                   description: "El documento de identidad o DNI del paciente."
+                },
+                pin: {
+                  type: Type.STRING,
+                  description: "El PIN de seguridad de 4 dígitos del paciente."
                 }
               },
-              required: ["dni"]
+              required: ["dni", "pin"]
             }
           };
 
           const generationConfig = {
-            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI, usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
+            systemInstruction: `Eres el agente inteligente de una clínica médica. El nombre de la clínica es "${clinicConfig.name}". Solo tienes tareas de soporte, agendamiento y respuestas a dudas generales. Sigue estas instrucciones: ${systemPrompt}. Si el paciente proporciona su DNI pero no su PIN, indícale amablemente que necesitas tanto su DNI como su PIN de seguridad de 4 dígitos para consultar sus turnos. Usa la herramienta consultarEstadoPaciente para verificar si está registrado y si tiene turnos solo si ha proporcionado AMBOS datos. Si tiene turno, recuérdale la fecha y hora. Si no lo tiene o no está registrado, indícale amablemente que puede agendar aquí: ${bookingUrl}\n\nIMPORTANTE PARA ENLACES: Al enviar el link, envíalo como texto crudo, SIN utilizar formato Markdown para enlaces (NO uses [texto](URL)). WhatsApp requiere que los links se envíen completos y sin envolver en otros caracteres para que sean clickeables.`,
             tools: [{ functionDeclarations: [consultarEstadoPaciente] }]
           };
 
@@ -287,6 +291,7 @@ async function startWhatsAppBot(clinicId: string, host: string) {
             const call = response1.functionCalls[0];
             if (call.name === 'consultarEstadoPaciente') {
               const dniArg = call.args.dni;
+              const pinArg = call.args.pin;
               let toolResultStr = "Error al consultar la base de datos.";
               
               if (typeof dniArg === 'string') {
@@ -299,22 +304,11 @@ async function startWhatsAppBot(clinicId: string, host: string) {
                   const patientId = patientSnap.docs[0].id;
                   const patientData = patientSnap.docs[0].data();
                   
-                  // Security Check: Match last 4 digits of WhatsApp phone vs Database phone
-                  const incomingFull = remoteJid.split('@')[0];
-                  const incomingClean = incomingFull.split(':')[0];
-                  const incomingLast4 = incomingClean.slice(-4);
-                  
-                  const dbPhoneRaw = patientData.phone || '';
-                  const dbPhoneStr = String(dbPhoneRaw);
-                  const dbPhoneClean = dbPhoneStr.replace(/\D/g, '');
-                  const dbPhoneLast4 = dbPhoneClean.slice(-4);
+                  // Security Check: Match provided PIN vs Database PIN
+                  const dbPin = patientData.pin || '';
 
-                  const logMsg = `[${new Date().toISOString()}] Security check for DNI ${dniArg}: incomingFull=${incomingFull}, incomingClean=${incomingClean}, incomingLast4=${incomingLast4}, dbPhoneRaw=${dbPhoneRaw}, dbPhoneClean=${dbPhoneClean}, dbPhoneLast4=${dbPhoneLast4}\n`;
-                  console.log(logMsg);
-                  import('fs').then(fs => fs.appendFileSync('wa_logs.txt', logMsg)).catch(console.error);
-
-                  if (!dbPhoneLast4 || incomingLast4 !== dbPhoneLast4) {
-                    toolResultStr = `ALERTA DE SEGURIDAD ESTRICTA: El número de WhatsApp del usuario no coincide con el registrado para el DNI suministrado. TIENES PROHIBIDO entregar información personal o de turnos. Responde indicando que por políticas de privacidad no puedes darle información y debe comunicarse directamente con la clínica.`;
+                  if (!dbPin || String(pinArg) !== String(dbPin)) {
+                    toolResultStr = `ALERTA DE SEGURIDAD ESTRICTA: El PIN provisto no coincide con el registrado para el DNI suministrado. TIENES PROHIBIDO entregar información personal o de turnos. Responde indicando que por políticas de privacidad el PIN es incorrecto y no puedes darle información.`;
                   } else {
                     const appointmentsRef = getDb().collection('clinics').doc(clinicId).collection('appointments');
                     // Consultar turnos futuros

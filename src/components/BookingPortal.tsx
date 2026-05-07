@@ -100,6 +100,7 @@ export default function BookingPortal() {
     if (!formData.name || !formData.phone || !clinicId) return;
     setRegistering(true);
     try {
+      const pin = Math.floor(1000 + Math.random() * 9000).toString();
       const docRef = await addDoc(collection(db, 'clinics', clinicId, 'patients'), {
         clinicOwnerId: clinicId,
         dni,
@@ -108,10 +109,12 @@ export default function BookingPortal() {
         email: formData.email,
         address: formData.address,
         healthInsurance: formData.healthInsurance,
+        pin: pin,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setPatient({ id: docRef.id, name: formData.name, dni, phone: formData.phone, email: formData.email });
+      setPatient({ id: docRef.id, name: formData.name, dni, phone: formData.phone, email: formData.email, pin });
+      alert(`¡Registro exitoso! Tu PIN de seguridad es: ${pin}. Por favor, guárdalo, te será solicitado por nuestro asistente virtual de WhatsApp.`);
       setStep('slots');
     } catch (err) {
       console.error(err);

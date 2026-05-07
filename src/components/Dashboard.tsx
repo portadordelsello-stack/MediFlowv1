@@ -328,6 +328,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                updatedAt: serverTimestamp()
            });
        } else {
+           const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
            await addDoc(collection(db, 'clinics', user.uid, 'patients'), {
                clinicOwnerId: user.uid,
                name: patientForm.name || '',
@@ -336,9 +337,11 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                email: patientForm.email || '',
                address: patientForm.address || '',
                healthInsurance: patientForm.healthInsurance || '',
+               pin: generatedPin,
                createdAt: serverTimestamp(),
                updatedAt: serverTimestamp()
            });
+           alert(`Paciente guardado exitosamente. El PIN generado para este paciente es: ${generatedPin}`);
        }
        setPatientForm(null);
      } catch(err: any) {
@@ -1139,6 +1142,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                               <th className="px-6 py-4 border-b border-slate-100">DNI</th>
                               <th className="px-6 py-4 border-b border-slate-100">WhatsApp</th>
                               <th className="px-6 py-4 border-b border-slate-100">Email</th>
+                              <th className="px-6 py-4 border-b border-slate-100">PIN (IA)</th>
                               <th className="px-6 py-4 border-b border-slate-100">Obra Social</th>
                               <th className="px-6 py-4 border-b border-slate-100">Acciones</th>
                            </tr>
@@ -1157,6 +1161,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.dni}</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.phone}</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.email || '-'}</td>
+                                 <td className="px-6 py-4 text-sm text-indigo-600 font-mono font-bold tracking-widest">{p.pin || '-'}</td>
                                  <td className="px-6 py-4 text-sm text-slate-600">{p.healthInsurance || '-'}</td>
                                  <td className="px-6 py-4 flex items-center gap-3">
                                     <button onClick={() => handleOpenPatientModal(p)} className="text-slate-400 hover:text-indigo-600" title="Editar">
