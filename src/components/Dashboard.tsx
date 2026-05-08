@@ -5,6 +5,7 @@ import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X, HelpCircle, Send, Phone, PhoneOff, Mic } from 'lucide-react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import Markdown from 'react-markdown';
+import { LATAM_COUNTRIES } from '../constants';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
@@ -425,11 +426,19 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
   const handleOpenPatientModal = (patient?: any) => {
     if (patient) {
+       let defaultPrefix = '+54';
+       let cleanPhone = patient.phone || '';
+       const match = LATAM_COUNTRIES.find(c => cleanPhone.startsWith(c.code + ' ') || cleanPhone.startsWith(c.code));
+       if (match) {
+         defaultPrefix = match.code;
+         cleanPhone = cleanPhone.replace(match.code, '').trim();
+       }
        setPatientForm({
           id: patient.id,
           name: patient.name || '',
           dni: patient.dni || '',
-          phone: patient.phone || '',
+          phonePrefix: defaultPrefix,
+          phone: cleanPhone,
           email: patient.email || '',
           address: patient.address || '',
           healthInsurance: patient.healthInsurance || ''
@@ -438,6 +447,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
        setPatientForm({
           name: '',
           dni: '',
+          phonePrefix: '+54',
           phone: '',
           email: '',
           address: '',
@@ -451,11 +461,12 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
      if (!patientForm) return;
      setSavingPatient(true);
      try {
+       const fullPhone = `${patientForm.phonePrefix} ${patientForm.phone.trim()}`;
        if (patientForm.id) {
            await updateDoc(doc(db, 'clinics', user.uid, 'patients', patientForm.id), {
                name: patientForm.name || '',
                dni: patientForm.dni || '',
-               phone: patientForm.phone || '',
+               phone: fullPhone,
                email: patientForm.email || '',
                address: patientForm.address || '',
                healthInsurance: patientForm.healthInsurance || '',
@@ -466,7 +477,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                clinicOwnerId: user.uid,
                name: patientForm.name || '',
                dni: patientForm.dni || '',
-               phone: patientForm.phone || '',
+               phone: fullPhone,
                email: patientForm.email || '',
                address: patientForm.address || '',
                healthInsurance: patientForm.healthInsurance || '',
@@ -1361,13 +1372,27 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Número de WhatsApp</label>
-                      <input 
-                        type="text"
-                        required
-                        value={patientForm.phone}
-                        onChange={e => setPatientForm({...patientForm, phone: e.target.value})}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                      />
+                      <div className="flex gap-2">
+                        <select
+                          value={patientForm.phonePrefix}
+                          onChange={e => setPatientForm({...patientForm, phonePrefix: e.target.value})}
+                          className="w-1/3 px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm bg-white text-slate-700"
+                        >
+                          {LATAM_COUNTRIES.map(country => (
+                            <option key={country.name} value={country.code}>
+                              {country.flag} {country.code}
+                            </option>
+                          ))}
+                        </select>
+                        <input 
+                          type="text"
+                          required
+                          value={patientForm.phone}
+                          onChange={e => setPatientForm({...patientForm, phone: e.target.value})}
+                          placeholder="9 341 0000000"
+                          className="w-2/3 flex-1 px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { doc, getDoc, collection, query, where, getDocs, addDoc, serverTimestamp, getDocFromServer, limit, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Calendar as CalendarIcon, Clock, User, Phone, Mail, ArrowRight, CheckCircle2, Activity, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LATAM_COUNTRIES } from '../constants';
 
 const isDateBlocked = (dateStr: string, clinicObj: any) => {
   if (!dateStr || !clinicObj) return false;
@@ -35,7 +36,7 @@ export default function BookingPortal() {
   const [error, setError] = useState('');
 
   // Form for registration
-  const [formData, setFormData] = useState({ name: '', phone: '', email: '', address: '', healthInsurance: '' });
+  const [formData, setFormData] = useState({ name: '', phonePrefix: '+54', phone: '', email: '', address: '', healthInsurance: '' });
 
   // Slot selection
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -109,18 +110,19 @@ export default function BookingPortal() {
     if (!formData.name || !formData.phone || !clinicId) return;
     setRegistering(true);
     try {
+      const fullPhone = `${formData.phonePrefix} ${formData.phone.trim()}`;
       const docRef = await addDoc(collection(db, 'clinics', clinicId, 'patients'), {
         clinicOwnerId: clinicId,
         dni,
         name: formData.name,
-        phone: formData.phone,
+        phone: fullPhone,
         email: formData.email,
         address: formData.address,
         healthInsurance: formData.healthInsurance,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setPatient({ id: docRef.id, name: formData.name, dni, phone: formData.phone, email: formData.email });
+      setPatient({ id: docRef.id, name: formData.name, dni, phone: fullPhone, email: formData.email });
       setStep('slots');
     } catch (err) {
       console.error(err);
@@ -305,13 +307,26 @@ export default function BookingPortal() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">WhatsApp / Celular</label>
-                    <input 
-                      type="tel" 
-                      value={formData.phone}
-                      onChange={e => setFormData({...formData, phone: e.target.value})}
-                      placeholder="Ej. +54 9 341 0000000"
-                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium"
-                    />
+                    <div className="flex gap-2">
+                      <select 
+                        value={formData.phonePrefix}
+                        onChange={e => setFormData({...formData, phonePrefix: e.target.value})}
+                        className="w-1/3 px-3 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-700"
+                      >
+                        {LATAM_COUNTRIES.map(country => (
+                          <option key={country.name} value={country.code}>
+                            {country.flag} {country.code}
+                          </option>
+                        ))}
+                      </select>
+                      <input 
+                        type="tel" 
+                        value={formData.phone}
+                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                        placeholder="Ej. 9 341 0000000"
+                        className="w-2/3 flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Email (Opcional)</label>
