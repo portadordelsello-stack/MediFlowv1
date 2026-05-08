@@ -729,23 +729,23 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform md:relative md:translate-x-0`}>
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+      <aside className={`fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform md:relative md:translate-x-0 shadow-2xl md:shadow-none`}>
+        <div className="p-6 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-              <Calendar className="w-6 h-6" />
+            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-sky-500/20">
+              <Calendar className="w-5 h-5" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Turnely</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-white">Turnely</h1>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400">
+          <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
           <button 
             onClick={() => { setActiveTab('agenda'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'agenda' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'agenda' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <Calendar className="w-5 h-5" />
             Agenda
@@ -753,7 +753,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
           <button 
             onClick={() => { setActiveTab('pacientes'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'pacientes' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'pacientes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <UserIcon className="w-5 h-5" />
             Pacientes
@@ -761,7 +761,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           
           <button 
             onClick={() => { setActiveTab('flujos'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'flujos' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'flujos' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <Bot className="w-5 h-5" />
             Flujos Respuesta
@@ -769,15 +769,19 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           
           <button 
             onClick={() => { setActiveTab('configuracion'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'configuracion' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'configuracion' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <Settings className="w-5 h-5" />
             Configuración
           </button>
 
+          <div className="pt-4 pb-2">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cuenta</p>
+          </div>
+
           <button 
             onClick={() => { setActiveTab('soporte'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'soporte' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'soporte' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <HelpCircle className="w-5 h-5" />
             Soporte
@@ -785,7 +789,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
           <button 
             onClick={() => { setActiveTab('perfil'); setIsSidebarOpen(false); }}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'perfil' ? 'bg-sky-50 text-sky-700' : 'text-slate-500 hover:bg-slate-50'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'perfil' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
           >
             <UserIcon className="w-5 h-5" />
             Perfil
@@ -794,7 +798,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {isAdmin && (
             <button 
               onClick={() => { setActiveTab('admin'); setIsSidebarOpen(false); }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${activeTab === 'admin' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:bg-slate-50'}`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all ${activeTab === 'admin' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
             >
               <Lock className="w-5 h-5" />
               Admin Sistema
@@ -802,10 +806,10 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           )}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className="p-4 border-t border-slate-800/50">
            <button 
              onClick={() => signOut(auth)}
-             className="w-full flex items-center gap-3 px-4 py-2 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-colors"
+             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-rose-400 hover:bg-rose-500/10 transition-colors"
            >
              <LogOut className="w-5 h-5" />
              Cerrar Sesión
@@ -814,15 +818,15 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-h-screen">
+      <main className="flex-1 flex flex-col min-h-screen bg-slate-50 overflow-hidden">
         {/* Header Bar */}
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 shrink-0">
-          <div className="flex items-center gap-3">
-             <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 text-slate-500">
-               <Menu className="w-6 h-6" />
+        <header className="h-20 flex items-center justify-between px-6 md:px-8 shrink-0 bg-transparent">
+          <div className="flex items-center gap-4">
+             <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 bg-white rounded-lg shadow-sm text-slate-500">
+               <Menu className="w-5 h-5" />
              </button>
              <div>
-               <h2 className="text-lg md:text-xl font-semibold text-slate-900">
+               <h2 className="text-2xl font-black text-slate-900 tracking-tight">
                  {activeTab === 'agenda' && 'Agenda'}
                  {activeTab === 'pacientes' && 'Pacientes'}
                  {activeTab === 'flujos' && 'Flujos AI'}
@@ -833,14 +837,20 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                </h2>
              </div>
           </div>
+          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-100">
+            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                {clinic?.name?.charAt(0) || user.email?.charAt(0) || 'U'}
+            </div>
+            <span className="text-sm font-bold text-slate-700 hidden md:block">{clinic?.name || 'Mi Clínica'}</span>
+          </div>
         </header>
 
-        <div className="p-8 flex-1 overflow-y-auto">
+        <div className="p-6 md:p-8 flex-1 overflow-y-auto">
           
           {/* TAB: AGENDA */}
           {activeTab === 'agenda' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-               <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+               <div className="lg:col-span-2 bg-white border border-slate-100 rounded-[2rem] p-8 shadow-xl shadow-slate-200/40">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                        <Calendar className="w-5 h-5 text-sky-600"/> 
@@ -892,7 +902,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                   </div>
                </div>
                
-               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col">
+               <div className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-xl shadow-slate-200/40 flex flex-col">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedDate}</h3>
                     <div className="flex gap-2">
@@ -1112,7 +1122,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: PACIENTES */}
           {activeTab === 'pacientes' && (
             <div className="max-w-6xl mx-auto">
-               <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+               <div className="bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 overflow-hidden">
                   <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                      <div>
                         <h3 className="font-bold text-slate-900">Listado de Pacientes</h3>
@@ -1311,7 +1321,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: FLUJOS DE RESPUESTA */}
           {activeTab === 'flujos' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[700px]">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-xl shadow-slate-200/40 flex flex-col h-[700px]">
                 <div className="flex items-center justify-between mb-6 shrink-0">
                   <h3 className="font-bold flex items-center gap-2 text-slate-900">
                     <span className="w-3 h-3 bg-indigo-500 rounded-full"></span>
@@ -1426,7 +1436,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: CONFIGURACION / WHATSAPP */}
           {activeTab === 'configuracion' && (
             <div className="max-w-2xl mx-auto">
-              <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+              <div className="bg-white border md:border-none ring-1 ring-slate-100 rounded-[2rem] p-8 md:p-10 shadow-2xl shadow-slate-200/40">
                 <div className="flex items-center justify-between mb-8">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">Conexión de WhatsApp</h3>
@@ -1459,7 +1469,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
                   {waStatus === 'INITIALIZING' && (
                     <div className="text-center">
-                      <div className="w-12 h-12 border-4 border-sky-100 border-t-sky-600 rounded-full animate-spin mx-auto mb-4"></div>
+                      <div className="w-12 h-12 border-[3px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin mx-auto mb-4"></div>
                       <p className="text-slate-600 font-medium text-sm">Generando código seguro...</p>
                     </div>
                   )}
@@ -1520,7 +1530,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: PERFIL */}
           {activeTab === 'perfil' && (
             <div className="max-w-2xl mx-auto space-y-8">
-               <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+               <div className="bg-white border border-slate-100 rounded-[2rem] p-8 md:p-10 shadow-xl shadow-slate-200/40">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900">Información de la Clínica</h3>
                     {!isEditingProfile && currentPlan === 'PREMIUM' && (
@@ -1602,7 +1612,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                   )}
                </div>
 
-               <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
+               <div className="bg-white border border-slate-100 rounded-[2rem] p-8 md:p-10 shadow-xl shadow-slate-200/40 relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
                      <ShieldCheck className="w-32 h-32" />
                   </div>
@@ -1654,7 +1664,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: SOPORTE */}
           {activeTab === 'soporte' && (
             <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 h-[700px] animate-fade-in-up">
-              <div className="lg:col-span-2 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden h-full">
+              <div className="lg:col-span-2 flex flex-col bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 overflow-hidden h-full">
                 <div className="p-6 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                    <div>
                      <h3 className="text-xl font-bold text-slate-900 flex items-center shrink-0">
@@ -1716,7 +1726,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
               </div>
 
               {currentPlan !== 'PREMIUM' ? (
-                <div className="lg:col-span-1 flex flex-col bg-gradient-to-br from-indigo-50 to-sky-50 border border-indigo-100 rounded-2xl shadow-sm p-8 text-center justify-center relative overflow-hidden">
+                <div className="lg:col-span-1 flex flex-col bg-gradient-to-br from-indigo-50 to-sky-50 border border-indigo-100 rounded-[2rem] shadow-xl shadow-indigo-100/50 p-8 md:p-10 text-center justify-center relative overflow-hidden">
                    <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none">
                       <HelpCircle className="w-48 h-48 text-indigo-900" />
                    </div>
@@ -1754,7 +1764,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                    </div>
                 </div>
               ) : (
-                <div className="lg:col-span-1 flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm p-8 text-center justify-center">
+                <div className="lg:col-span-1 flex flex-col bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 p-8 md:p-10 text-center justify-center">
                    <div className="w-16 h-16 bg-sky-50 rounded-full flex items-center justify-center mx-auto mb-6">
                       <MessageCircle className="w-8 h-8 text-sky-600" />
                    </div>
@@ -1778,7 +1788,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
           {/* TAB: ADMIN */}
           {isAdmin && activeTab === 'admin' && (
             <div className="max-w-6xl mx-auto space-y-8 animate-fade-in-up">
-              <div className="bg-white border border-indigo-200 rounded-2xl p-8 shadow-sm relative overflow-hidden">
+              <div className="bg-white border border-indigo-100 rounded-[2rem] p-8 md:p-10 shadow-xl shadow-indigo-200/40 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
                   <Lock className="w-48 h-48 text-indigo-900" />
                 </div>
@@ -1854,7 +1864,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
               </div>
 
               {/* Enhanced Clinics List */}
-              <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+              <div className="bg-white border border-slate-100 rounded-[2rem] shadow-xl shadow-slate-200/40 overflow-hidden">
                 <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
                   <div>
                     <h3 className="text-xl font-bold text-slate-900">Gestión de Clínicas</h3>

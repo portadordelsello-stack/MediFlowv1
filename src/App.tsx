@@ -112,7 +112,10 @@ function MainApp() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Activity className="animate-spin text-sky-600 w-8 h-8" /></div>;
+    return <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+      <div className="w-12 h-12 border-[3px] border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
+      <p className="text-slate-400 font-medium text-sm animate-pulse">Cargando...</p>
+    </div>;
   }
 
   if (!user) {
