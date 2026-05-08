@@ -444,6 +444,26 @@ function MainApp() {
            </div>
         </main>
 
+           {/* CTA BOTTOM */}
+           <div className="max-w-4xl mx-auto mt-32 mb-10 px-6 lg:px-0">
+              <div className="bg-gradient-to-br from-sky-500 to-indigo-600 rounded-[2.5rem] p-10 md:p-16 text-center shadow-xl relative overflow-hidden">
+                 <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white opacity-10 blur-3xl"></div>
+                 <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 rounded-full bg-indigo-500 opacity-20 blur-3xl"></div>
+                 
+                 <div className="relative z-10">
+                    <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">¿Listo para modernizar tu clínica?</h2>
+                    <p className="text-sky-100 mb-10 max-w-xl mx-auto text-lg">Empieza ahora con nuestro plan gratis. Sin tarjetas de crédito, sin compromisos.</p>
+                    <button 
+                      onClick={() => setShowLoginModal(true)}
+                      className="bg-white text-indigo-600 hover:bg-slate-50 font-bold text-lg py-4 px-10 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-1 inline-flex items-center gap-2"
+                    >
+                      Empezar ahora gratis
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
+                 </div>
+              </div>
+           </div>
+
         <footer className="bg-slate-900 text-slate-400 py-12 px-6 lg:px-12 mt-20">
            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
