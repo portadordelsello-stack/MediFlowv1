@@ -1774,14 +1774,14 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                      Soporte Premium Activo
                    </h3>
                    <p className="text-slate-500 mb-6 font-medium text-sm">
-                     Cuentas con soporte humano prioritario 24/7. Nuestro equipo de expertos está siempre disponible.
+                     Cuentas con soporte técnico prioritario 24/7. Nuestro equipo de agentes de IA está siempre disponible.
                    </p>
                    <button
                      onClick={() => setShowCallModal(true)}
                      className="w-full px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all flex justify-center items-center gap-2"
                    >
                      <Phone className="w-5 h-5" />
-                     Llamar a un Agente (IA)
+                     Solicitar
                    </button>
                 </div>
               )}
