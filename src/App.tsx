@@ -127,9 +127,7 @@ function MainApp() {
       <div className="min-h-screen bg-white font-sans text-slate-800 selection:bg-sky-100 selection:text-sky-900">
         <header className="fixed top-0 left-0 right-0 h-20 bg-white/80 backdrop-blur-md border-b border-slate-100 z-50 flex items-center justify-between px-6 lg:px-12">
           <div className="flex items-center gap-3">
-             <div className="w-10 h-10 bg-sky-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm">
-                <Calendar className="w-6 h-6" />
-             </div>
+             <img src="/turnely.jpg" alt="Turnely AI" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
              <span className="text-xl font-bold tracking-tight text-slate-900">Turnely</span>
           </div>
           <nav className="flex items-center gap-4">
@@ -474,9 +472,7 @@ function MainApp() {
         <footer className="bg-slate-900 text-slate-400 py-12 px-6 lg:px-12 mt-20">
            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
-                 <div className="w-8 h-8 bg-sky-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-                    <Calendar className="w-5 h-5" />
-                 </div>
+                 <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
                  <span className="text-xl font-bold tracking-tight text-white">Turnely</span>
               </div>
               <div className="text-sm">

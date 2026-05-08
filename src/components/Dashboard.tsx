@@ -867,9 +867,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
       <aside className={`fixed inset-y-0 left-0 w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 z-50 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform md:relative md:translate-x-0 shadow-2xl md:shadow-none`}>
         <div className="p-6 border-b border-slate-800/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-sky-500 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-sky-500/20">
-              <Calendar className="w-5 h-5" />
-            </div>
+            <img src="/turnely.jpg" alt="Turnely AI" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-sky-500/20" />
             <h1 className="text-xl font-extrabold tracking-tight text-white">Turnely</h1>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-white">

@@ -7,9 +7,7 @@ export default function TermsOfService() {
       <header className="bg-white border-b border-slate-200 py-4 px-6 fixed top-0 w-full z-10">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-sky-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-              <Calendar className="w-5 h-5" />
-            </div>
+            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
             <span className="text-xl font-bold text-slate-800 tracking-tight">Turnely</span>
           </Link>
         </div>
@@ -61,9 +59,7 @@ export default function TermsOfService() {
       <footer className="bg-slate-900 text-slate-400 py-12 px-6 lg:px-12 mt-auto">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-sky-600 rounded-lg flex items-center justify-center text-white shadow-sm">
-              <Calendar className="w-5 h-5" />
-            </div>
+            <img src="/turnely.jpg" alt="Turnely AI" className="w-8 h-8 rounded-lg object-cover shadow-sm" />
             <span className="text-xl font-bold tracking-tight text-white">Turnely</span>
           </div>
           <div className="text-sm">
