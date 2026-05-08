@@ -445,7 +445,19 @@ app.post('/api/whatsapp/send-reminders', async (req, res) => {
     for (const appt of appointments) {
       try {
         if (!appt.phone) continue;
-        const jid = appt.phone.replace(/\D/g, '') + '@s.whatsapp.net';
+        const cleanNumber = appt.phone.replace(/\D/g, '');
+        
+        // WhatsApp internally still uses the @s.whatsapp.net format.
+        // For some countries like Argentina it might need an extra '9' (e.g. 549...).
+        // sock.onWhatsApp returns the correct internal JID for the user if they exist.
+        const waCheck = await sock.onWhatsApp(cleanNumber);
+        
+        if (!waCheck || waCheck.length === 0 || !waCheck[0].exists) {
+           console.log(`Number ${cleanNumber} is not registered on WhatsApp (or format is incorrect).`);
+           continue;
+        }
+
+        const jid = waCheck[0].jid;
         const messageText = `Hola ${appt.patientName}. Te recordamos que tienes un turno agendado para el dia de mañana (${appt.date}) a las ${appt.time}hs. ¡Te esperamos!`;
         
         await sock.sendMessage(jid, { text: messageText });
