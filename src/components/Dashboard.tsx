@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
-import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X, HelpCircle, Send } from 'lucide-react';
+import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X, HelpCircle, Send, Phone, PhoneOff, Mic } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 
@@ -157,6 +157,8 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
   const [systemPrices, setSystemPrices] = useState({ BASICO: 4999, PREMIUM: 14999 });
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected'>('idle');
   const [upgradingPlan, setUpgradingPlan] = useState(false);
   const [allClinics, setAllClinics] = useState<any[]>([]);
   const [editingClinic, setEditingClinic] = useState<any>(null);
@@ -1775,10 +1777,11 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                      Cuentas con soporte humano prioritario 24/7. Nuestro equipo de expertos está siempre disponible.
                    </p>
                    <button
+                     onClick={() => setShowCallModal(true)}
                      className="w-full px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all flex justify-center items-center gap-2"
                    >
-                     <MessageCircle className="w-5 h-5" />
-                     Chat con Agente
+                     <Phone className="w-5 h-5" />
+                     Llamar a un Agente (IA)
                    </button>
                 </div>
               )}
@@ -2119,6 +2122,72 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
         </div>
       </main>
+
+      {/* Call Simulator Modal */}
+      {showCallModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] w-full max-w-sm overflow-hidden shadow-2xl relative">
+            <div className="p-8 text-center flex flex-col items-center">
+              <button 
+                onClick={() => setShowCallModal(false)}
+                className="absolute top-6 right-6 p-2 bg-slate-800/50 hover:bg-slate-800 rounded-full text-slate-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="w-24 h-24 rounded-full bg-slate-800 border-4 border-slate-700 flex items-center justify-center mb-6 relative">
+                 {callStatus === 'calling' && <div className="absolute inset-0 rounded-full border-2 border-indigo-500 animate-ping"></div>}
+                 <Bot className="w-12 h-12 text-indigo-400" />
+              </div>
+
+              <h2 className="text-2xl font-bold text-white mb-2">Agente de Soporte</h2>
+              <p className="text-slate-400 mb-10 h-6">
+                {callStatus === 'idle' && 'Listo para llamar'}
+                {callStatus === 'calling' && <span className="animate-pulse text-indigo-400">Llamando...</span>}
+                {callStatus === 'connected' && <span className="text-emerald-400 font-medium">00:00 - Conectado</span>}
+              </p>
+
+              <div className="flex items-center justify-center gap-6">
+                {callStatus === 'idle' ? (
+                  <button 
+                    onClick={() => setCallStatus('calling')}
+                    className="w-16 h-16 rounded-full bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
+                  >
+                    <Phone className="w-8 h-8 fill-current" />
+                  </button>
+                ) : (
+                  <>
+                    <button 
+                      className="w-14 h-14 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 transition-colors"
+                    >
+                      <Mic className="w-6 h-6" />
+                    </button>
+                    <button 
+                      onClick={() => setCallStatus('idle')}
+                      className="w-16 h-16 rounded-full bg-rose-500 hover:bg-rose-400 flex items-center justify-center text-white shadow-lg shadow-rose-500/20 transition-all hover:scale-105"
+                    >
+                      <PhoneOff className="w-8 h-8 fill-current" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            {callStatus !== 'idle' && (
+              <div className="bg-slate-800/50 p-6 flex items-center justify-between text-xs font-semibold text-slate-400 uppercase tracking-widest border-t border-slate-800">
+                <span>Voz</span>
+                <div className="flex gap-1 items-center">
+                  <div className="w-1 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-1 h-4 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '100ms' }}></div>
+                  <div className="w-1 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '200ms' }}></div>
+                  <div className="w-1 h-5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+                <span>IA</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Upgrade Modal */}
       {showUpgradeModal && (
