@@ -438,6 +438,11 @@ app.post('/api/whatsapp/send-reminders', async (req, res) => {
   const sock = waClients.get(clinicId);
   if (!sock) return res.status(400).json({ error: 'WhatsApp no está conectado' });
   
+  const clinicConfig = waConfigs.get(clinicId);
+  if (clinicConfig?.plan !== 'PREMIUM') {
+    return res.status(403).json({ error: 'Funcionalidad exclusiva del plan PREMIUM' });
+  }
+  
   res.json({ success: true, count: appointments.length, message: 'Enviando recordatorios en segundo plano...' });
 
   // Background task

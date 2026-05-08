@@ -1107,12 +1107,18 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                     </h3>
                     <div className="flex gap-2">
                       <button 
-                        onClick={handleSendReminders}
-                        disabled={isSendingReminders || appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED').length === 0}
-                        className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 py-1.5 px-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                        onClick={() => {
+                          if (clinic?.plan !== 'PREMIUM') {
+                            setShowUpgradeModal(true);
+                          } else {
+                            handleSendReminders();
+                          }
+                        }}
+                        disabled={isSendingReminders || (clinic?.plan === 'PREMIUM' && appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED').length === 0)}
+                        className={`text-xs py-1.5 px-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${clinic?.plan !== 'PREMIUM' ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
                       >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        Recordar
+                        {clinic?.plan !== 'PREMIUM' ? <Lock className="w-3.5 h-3.5" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                        {clinic?.plan !== 'PREMIUM' ? 'Solo Premium' : 'Recordar'}
                       </button>
                       <button 
                         onClick={() => toggleBlockDate(selectedDate)}
