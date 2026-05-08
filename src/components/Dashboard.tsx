@@ -48,7 +48,61 @@ export default function Dashboard({ user }: { user: User }) {
   const [clinic, setClinic] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [waStatus, setWaStatus] = useState<string>('DISCONNECTED');
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
   const [activeTab, setActiveTab] = useState<'agenda' | 'pacientes' | 'flujos' | 'configuracion' | 'perfil' | 'admin' | 'soporte'>('agenda');
+
+  const handleSendReminders = async () => {
+    if (waStatus !== 'CONNECTED') {
+      alert('WhatsApp no está conectado. Ve a la pestaña Configuración para vincular tu WhatsApp primero.');
+      return;
+    }
+    
+    const dayAppointments = appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED');
+    if (dayAppointments.length === 0) {
+      alert('No hay turnos para enviar recordatorios en este día.');
+      return;
+    }
+
+    if (!confirm(`¿Enviar récordatorio de WhatsApp a los ${dayAppointments.length} pacientes del ${selectedDate}?`)) {
+      return;
+    }
+
+    setIsSendingReminders(true);
+    try {
+      const payloadAppointments = dayAppointments.map(app => {
+        const patient = patients.find(p => p.id === app.patientId);
+        return {
+          phone: patient?.phone || '',
+          patientName: patient?.name || 'paciente',
+          date: app.date,
+          time: app.time
+        };
+      }).filter(a => a.phone);
+
+      if (payloadAppointments.length === 0) {
+        alert('Ninguno de los pacientes de este día tiene un número de WhatsApp registrado.');
+        setIsSendingReminders(false);
+        return;
+      }
+
+      const response = await fetch('/api/whatsapp/send-reminders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId: user.uid, appointments: payloadAppointments })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert('Ok. El envío se ha iniciado correctamente en segundo plano. Los mensajes se envían de forma progresiva.');
+      } else {
+        alert('Error: ' + data.error);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Ocurrió un error al procesar el envío de recordatorios.');
+    } finally {
+      setIsSendingReminders(false);
+    }
+  };
   const [supportMessages, setSupportMessages] = useState<{ role: 'user' | 'assistant', text: string }[]>([
     { role: 'assistant', text: '¡Hola! Soy tu asistente de soporte entrenado sobre el funcionamiento de Turnely. ¿En qué te puedo ayudar hoy?' }
   ]);
@@ -1048,8 +1102,18 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                
                <div className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-xl shadow-slate-200/40 flex flex-col">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-slate-900">Turnos: {selectedDate}</h3>
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                       Turnos: {selectedDate}
+                    </h3>
                     <div className="flex gap-2">
+                      <button 
+                        onClick={handleSendReminders}
+                        disabled={isSendingReminders || appointments.filter(a => a.date === selectedDate && a.status !== 'CANCELLED').length === 0}
+                        className="text-xs bg-emerald-100 text-emerald-700 hover:bg-emerald-200 py-1.5 px-3 rounded-lg font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        Recordar
+                      </button>
                       <button 
                         onClick={() => toggleBlockDate(selectedDate)}
                         className={`text-xs py-1.5 px-3 rounded-lg font-bold transition-colors ${isDateBlocked(selectedDate, clinic) ? 'bg-slate-200 text-slate-700 hover:bg-slate-300' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}

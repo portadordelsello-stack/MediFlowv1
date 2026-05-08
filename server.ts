@@ -429,6 +429,38 @@ app.get('/api/whatsapp/status/:clinicId', (req, res) => {
   res.json({ status, qr, messagesUsed });
 });
 
+app.post('/api/whatsapp/send-reminders', async (req, res) => {
+  const { clinicId, appointments } = req.body;
+  if (!clinicId || !appointments || !Array.isArray(appointments)) {
+    return res.status(400).json({ error: 'Solicitud inválida' });
+  }
+
+  const sock = waClients.get(clinicId);
+  if (!sock) return res.status(400).json({ error: 'WhatsApp no está conectado' });
+  
+  res.json({ success: true, count: appointments.length, message: 'Enviando recordatorios en segundo plano...' });
+
+  // Background task
+  (async () => {
+    for (const appt of appointments) {
+      try {
+        if (!appt.phone) continue;
+        const jid = appt.phone.replace(/\D/g, '') + '@s.whatsapp.net';
+        const messageText = `Hola ${appt.patientName}. Te recordamos que tienes un turno agendado para el dia de mañana (${appt.date}) a las ${appt.time}hs. ¡Te esperamos!`;
+        
+        await sock.sendMessage(jid, { text: messageText });
+        console.log(`Reminder sent to ${jid}`);
+        
+        // Wait 20 seconds between sends to prevent anti-spam ban
+        await new Promise(r => setTimeout(r, 20000));
+      } catch (err) {
+        console.error(`Error sending reminder to ${appt.phone}:`, err);
+      }
+    }
+    console.log(`Finished sending ${appointments.length} reminders for ${clinicId}`);
+  })();
+});
+
 // Mercado Pago Routes
 app.post('/api/mercadopago/create-preference', async (req, res) => {
   try {
