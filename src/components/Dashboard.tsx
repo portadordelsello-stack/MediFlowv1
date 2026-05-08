@@ -3,7 +3,7 @@ import { User, signOut } from 'firebase/auth';
 import { doc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LogOut, QrCode, MessageCircle, Settings, Calendar, User as UserIcon, Bot, ArrowRight, ShieldCheck, CreditCard, Lock, Menu, X, HelpCircle, Send, Phone, PhoneOff, Mic } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import Markdown from 'react-markdown';
 
 enum OperationType { CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write' }
@@ -151,14 +151,123 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
 
   // Admin Config
   const isAdmin = user.email === 'portadordelsello@gmail.com';
-  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 }, prices: { BASICO: 4999, PREMIUM: 14999 } });
+  const [adminConfig, setAdminConfig] = useState({ apiKey: '', projectId: '', location: '', limits: { GRATIS: 100, BASICO: 500, PREMIUM: 1000 }, prices: { BASICO: 4999, PREMIUM: 14999 }, voiceAgentPrompt: 'Eres un experto de soporte técnico de Turnely...' });
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [systemLimits, setSystemLimits] = useState({ GRATIS: 100, BASICO: 500, PREMIUM: 1000 });
   const [systemPrices, setSystemPrices] = useState({ BASICO: 4999, PREMIUM: 14999 });
+  const [systemVoiceAgentPrompt, setSystemVoiceAgentPrompt] = useState('Eres un experto de soporte técnico de Turnely...');
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected'>('idle');
+  const [callDuration, setCallDuration] = useState(0);
+  const liveSessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  const startVoiceCall = async () => {
+    setCallStatus('calling');
+    try {
+      if (!process.env.GEMINI_API_KEY) throw new Error("API Key not found");
+      const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      audioContextRef.current = audioCtx;
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } });
+      mediaStreamRef.current = stream;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      
+      const sessionPromise = genAI.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        callbacks: {
+          onopen: () => {
+            setCallStatus('connected');
+            setCallDuration(0);
+            
+            processor.onaudioprocess = (e) => {
+              const inputData = e.inputBuffer.getChannelData(0);
+              const pcm16 = new Int16Array(inputData.length);
+              for (let i = 0; i < inputData.length; i++) {
+                  const s = Math.max(-1, Math.min(1, inputData[i]));
+                  pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              const base64 = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(pcm16.buffer))));
+              sessionPromise.then(session => session.sendRealtimeInput({ audio: { data: base64, mimeType: 'audio/pcm;rate=16000' } }));
+            };
+            source.connect(processor);
+            processor.connect(audioCtx.destination);
+          },
+          onmessage: async (message: LiveServerMessage) => {
+            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            if (base64Audio && audioContextRef.current) {
+              const binary = atob(base64Audio);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const int16Array = new Int16Array(bytes.buffer);
+              const float32Array = new Float32Array(int16Array.length);
+              for (let i = 0; i < int16Array.length; i++) {
+                  float32Array[i] = int16Array[i] / 0x8000;
+              }
+              const audioBuffer = audioContextRef.current.createBuffer(1, float32Array.length, 24000);
+              audioBuffer.copyToChannel(float32Array, 0);
+
+              const audioSource = audioContextRef.current.createBufferSource();
+              audioSource.buffer = audioBuffer;
+              audioSource.connect(audioContextRef.current.destination);
+              audioSource.start();
+            }
+          },
+          onclose: () => {
+             endVoiceCall();
+          }
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
+          systemInstruction: systemVoiceAgentPrompt,
+        },
+      });
+
+      liveSessionRef.current = {
+        close: async () => {
+           try {
+              (await sessionPromise).close();
+           } catch (e) {}
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      endVoiceCall();
+    }
+  };
+
+  const endVoiceCall = () => {
+    setCallStatus('idle');
+    if (liveSessionRef.current) {
+       liveSessionRef.current.close().catch(console.error);
+       liveSessionRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop());
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(console.error);
+      audioContextRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (callStatus === 'connected') {
+       interval = setInterval(() => setCallDuration(d => d + 1), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [callStatus]);
+
   const [upgradingPlan, setUpgradingPlan] = useState(false);
   const [allClinics, setAllClinics] = useState<any[]>([]);
   const [editingClinic, setEditingClinic] = useState<any>(null);
@@ -403,6 +512,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
      fetch('/api/system-limits').then(r => r.json()).then(data => {
         if(data && data.limits) setSystemLimits(data.limits);
         if(data && data.prices) setSystemPrices(data.prices);
+        if(data && data.voiceAgentPrompt) setSystemVoiceAgentPrompt(data.voiceAgentPrompt);
      }).catch(console.error).finally(() => setPricesLoaded(true));
   }, []);
 
@@ -1854,6 +1964,16 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                       </div>
                     </div>
                   </div>
+
+                  <div className="mt-8 border-t border-slate-100 pt-6">
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Prompt Agente de Voz (IA Soporte)</label>
+                    <textarea 
+                      value={adminConfig.voiceAgentPrompt}
+                      onChange={e => setAdminConfig({...adminConfig, voiceAgentPrompt: e.target.value})}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm h-32 resize-none"
+                    />
+                  </div>
+
                   <div className="mt-8 flex justify-end">
                     <button 
                       onClick={saveAdminConfig}
@@ -2144,13 +2264,13 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
               <p className="text-slate-400 mb-10 h-6">
                 {callStatus === 'idle' && 'Listo para llamar'}
                 {callStatus === 'calling' && <span className="animate-pulse text-indigo-400">Llamando...</span>}
-                {callStatus === 'connected' && <span className="text-emerald-400 font-medium">00:00 - Conectado</span>}
+                {callStatus === 'connected' && <span className="text-emerald-400 font-medium">{String(Math.floor(callDuration / 60)).padStart(2, '0')}:{String(callDuration % 60).padStart(2, '0')} - Conectado</span>}
               </p>
 
               <div className="flex items-center justify-center gap-6">
                 {callStatus === 'idle' ? (
                   <button 
-                    onClick={() => setCallStatus('calling')}
+                    onClick={startVoiceCall}
                     className="w-16 h-16 rounded-full bg-emerald-500 hover:bg-emerald-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 transition-all hover:scale-105"
                   >
                     <Phone className="w-8 h-8 fill-current" />
@@ -2163,7 +2283,7 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                       <Mic className="w-6 h-6" />
                     </button>
                     <button 
-                      onClick={() => setCallStatus('idle')}
+                      onClick={endVoiceCall}
                       className="w-16 h-16 rounded-full bg-rose-500 hover:bg-rose-400 flex items-center justify-center text-white shadow-lg shadow-rose-500/20 transition-all hover:scale-105"
                     >
                       <PhoneOff className="w-8 h-8 fill-current" />

@@ -64,7 +64,8 @@ function getSystemConfig() {
     prices: {
       BASICO: 4999,
       PREMIUM: 14999
-    }
+    },
+    voiceAgentPrompt: 'Eres un experto de soporte técnico de Turnely. Tu objetivo es asistir a administradores de clínicas. Responde en español de forma cortés, técnica y conversacional.'
   };
 
   if (fs.existsSync(configPath)) {
@@ -373,9 +374,9 @@ app.get('/api/admin/system-config', (req, res) => {
 });
 
 app.post('/api/admin/system-config', (req, res) => {
-   const { apiKey, projectId, location, limits, prices } = req.body;
+   const { apiKey, projectId, location, limits, prices, voiceAgentPrompt } = req.body;
    const existing = getSystemConfig();
-   const newConfig = { ...existing, apiKey, projectId, location, limits: limits || existing.limits, prices: prices || existing.prices };
+   const newConfig = { ...existing, apiKey, projectId, location, limits: limits || existing.limits, prices: prices || existing.prices, voiceAgentPrompt: voiceAgentPrompt || existing.voiceAgentPrompt };
    fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2));
    initializeAI();
    res.json({ success: true });
@@ -384,7 +385,7 @@ app.post('/api/admin/system-config', (req, res) => {
 // We need a way for regular clients to get the limits and prices
 app.get('/api/system-limits', (req, res) => {
    const config = getSystemConfig();
-   res.json({ limits: config.limits, prices: config.prices });
+   res.json({ limits: config.limits, prices: config.prices, voiceAgentPrompt: config.voiceAgentPrompt });
 });
 
 // API Routes
