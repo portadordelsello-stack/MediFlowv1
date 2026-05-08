@@ -1,5 +1,7 @@
 import { useState, useEffect, ReactElement, FormEvent } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -28,6 +30,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/reservar/:clinicId" element={<BookingPortal />} />
+        <Route path="/privacidad" element={<PrivacyPolicy />} />
+        <Route path="/terminos" element={<TermsOfService />} />
         <Route path="/*" element={<MainApp />} />
       </Routes>
     </BrowserRouter>
@@ -479,8 +483,8 @@ function MainApp() {
                  &copy; {new Date().getFullYear()} Turnely Inc. Todos los derechos reservados.
               </div>
               <div className="flex gap-4 text-sm">
-                 <a href="#" className="hover:text-white transition-colors">Privacidad</a>
-                 <a href="#" className="hover:text-white transition-colors">Términos</a>
+                 <Link to="/privacidad" className="hover:text-white transition-colors">Privacidad</Link>
+                 <Link to="/terminos" className="hover:text-white transition-colors">Términos</Link>
                  <a href="#" className="hover:text-white transition-colors">Contacto</a>
               </div>
            </div>
