@@ -1776,27 +1776,42 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
                <div className="bg-white border border-slate-100 rounded-[2rem] p-8 md:p-10 shadow-xl shadow-slate-200/40">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg font-bold text-slate-900">Información de la Clínica</h3>
-                    {!isEditingProfile && currentPlan === 'PREMIUM' && (
+                    {!isEditingProfile && (
                       <button 
                         onClick={() => {
-                          setProfileForm({
-                            name: clinic?.name || '',
-                            specialty: clinic?.specialty || '',
-                            whatsappNumber: clinic?.whatsappNumber || '',
-                            contactEmail: clinic?.contactEmail || user.email || '',
-                            logoUrl: clinic?.logoUrl || ''
-                          });
-                          setIsEditingProfile(true);
+                          if (currentPlan !== 'PREMIUM') {
+                            setShowUpgradeModal(true);
+                          } else {
+                            setProfileForm({
+                              name: clinic?.name || '',
+                              specialty: clinic?.specialty || '',
+                              whatsappNumber: clinic?.whatsappNumber || '',
+                              contactEmail: clinic?.contactEmail || user.email || '',
+                              logoUrl: clinic?.logoUrl || ''
+                            });
+                            setIsEditingProfile(true);
+                          }
                         }}
-                        className="text-sm text-sky-600 hover:text-sky-700 font-bold px-4 py-2 bg-sky-50 rounded-xl"
+                        className={`group relative text-sm px-4 py-2 rounded-xl font-bold transition-all flex items-center justify-center min-w-[100px] overflow-hidden ${currentPlan !== 'PREMIUM' ? 'bg-emerald-100 text-emerald-700 hover:bg-amber-100 hover:text-amber-800' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
                       >
-                        Editar
+                        {currentPlan !== 'PREMIUM' ? (
+                           <>
+                             <span className="flex items-center gap-1.5 group-hover:hidden">
+                               <Settings className="w-4 h-4" />
+                               Editar
+                             </span>
+                             <span className="hidden items-center gap-1.5 group-hover:flex">
+                               <Lock className="w-4 h-4" />
+                               Solo Premium
+                             </span>
+                           </>
+                        ) : (
+                           <span className="flex items-center gap-1.5">
+                             <Settings className="w-4 h-4" />
+                             Editar
+                           </span>
+                        )}
                       </button>
-                    )}
-                    {!isEditingProfile && currentPlan !== 'PREMIUM' && (
-                      <div className="text-xs text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 font-medium">
-                        Edición solo disponible en Plan Premium
-                      </div>
                     )}
                   </div>
 
