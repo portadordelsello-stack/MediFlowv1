@@ -174,6 +174,9 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       audioContextRef.current = audioCtx;
 
+      let nextPlayTime = 0;
+      const activeSources: AudioBufferSourceNode[] = [];
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000 } });
       mediaStreamRef.current = stream;
 
@@ -201,6 +204,14 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
             processor.connect(audioCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
+            if (message.serverContent?.interrupted && audioContextRef.current) {
+               activeSources.forEach(s => {
+                   try { s.stop(); } catch(e) {}
+               });
+               activeSources.length = 0;
+               nextPlayTime = audioContextRef.current.currentTime;
+            }
+
             const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && audioContextRef.current) {
               const binary = atob(base64Audio);
@@ -217,7 +228,19 @@ Responde de manera amable, útil, clara y en español. Nunca divagues ni reveles
               const audioSource = audioContextRef.current.createBufferSource();
               audioSource.buffer = audioBuffer;
               audioSource.connect(audioContextRef.current.destination);
-              audioSource.start();
+
+              if (nextPlayTime < audioContextRef.current.currentTime) {
+                 nextPlayTime = audioContextRef.current.currentTime;
+              }
+              
+              audioSource.start(nextPlayTime);
+              activeSources.push(audioSource);
+              nextPlayTime += audioBuffer.duration;
+
+              audioSource.onended = () => {
+                 const i = activeSources.indexOf(audioSource);
+                 if (i > -1) activeSources.splice(i, 1);
+              };
             }
           },
           onclose: () => {
